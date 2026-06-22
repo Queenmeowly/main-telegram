@@ -7,59 +7,187 @@ SUPABASE_URL,
 SUPABASE_KEY
 );
 
-let USER = localStorage.getItem("user_id");
-if(!USER){
-  USER = "user_" + Date.now() + "_" + Math.floor(Math.random()*1000);
-  localStorage.setItem("user_id", USER);
+// ================= TELEGRAM LOGIN =================
+
+let USER = null;
+
+if (
+	window.Telegram &&
+	window.Telegram.WebApp &&
+	window.Telegram.WebApp.initDataUnsafe &&
+	window.Telegram.WebApp.initDataUnsafe.user
+){
+
+	window.Telegram.WebApp.ready();
+
+	USER =
+	String(
+		window.Telegram.WebApp.initDataUnsafe.user.id
+	);
+
+	console.log(
+		"Telegram User:",
+		USER
+	);
+
+}else{
+
+	document.body.innerHTML = `
+	<div style="
+	padding:30px;
+	color:white;
+	text-align:center;
+	font-size:20px;
+	">
+	❌ Please open inside Telegram
+	</div>
+	`;
+
+	throw new Error(
+		"Open inside Telegram"
+	);
+
 }
 
-let coins = Number(localStorage.getItem("coins")) || 0;
-let energy = Number(localStorage.getItem("energy")) || 100;
-// levels (persisted)
-let powerLv = Number(localStorage.getItem("powerLv")) || 1;
-let energyLv = Number(localStorage.getItem("energyLv")) || 1;
-let mineLv = Number(localStorage.getItem("mineLv")) || 1;
-let chargeLv = Number(localStorage.getItem("chargeLv")) || 1;
+let coins = Number(localStorage.getItem('coins')) || 0;
+let energy = Number(localStorage.getItem('energy')) || 100;
 
-// derived stats
-let maxEnergy = Number(localStorage.getItem("maxEnergy")) || (100 + (energyLv-1)*10);
-let power = /*coins per click*/ powerLv;
-let energyTimerEnd = Number(localStorage.getItem("energyTimerEnd")) || 0;
+let powerLv = Number(localStorage.getItem('powerLv')) || 1;
+let energyLv = Number(localStorage.getItem('energyLv')) || 1;
+let mineLv = Number(localStorage.getItem('mineLv')) || 1;
+let chargeLv = Number(localStorage.getItem('chargeLv')) || 1;
+
+let maxEnergy = Number(localStorage.getItem('maxEnergy')) || 100;
+
+let energyTimerEnd = Number(localStorage.getItem('energyTimerEnd')) || 0;
 const ENERGY_INTERVAL = 30 * 60; // seconds (default 30 minutes)
 
 let energyGain = energyLv;
 const particles = [];
 
+// save control
+let _saveInProgress = false;
+let _savePending = false;
+
+// Debug/status panel for environments without a console (Telegram WebView)
+function ensureDebugPanel(){
+	if(document.getElementById('saveStatus')) return;
+	const d = document.createElement('div');
+	d.id = 'saveStatus';
+	d.style.position = 'fixed';
+	d.style.right = '12px';
+	d.style.bottom = '12px';
+	d.style.zIndex = 99999;
+	d.style.background = 'rgba(0,0,0,0.6)';
+	d.style.color = 'white';
+	d.style.fontSize = '12px';
+	d.style.padding = '8px 10px';
+	d.style.borderRadius = '8px';
+	d.style.maxWidth = '320px';
+	d.style.boxShadow = '0 6px 20px rgba(0,0,0,0.6)';
+	d.innerHTML = '<b>Save status</b><div id="saveStatusBody" style="margin-top:6px;white-space:pre-wrap;overflow:auto;max-height:180px;"></div>';
+	document.body.appendChild(d);
+}
+
+function updateDebugPanel(msg){
+	try{
+		ensureDebugPanel();
+		const el = document.getElementById('saveStatusBody');
+		const time = new Date().toLocaleTimeString();
+		el.innerText = `[${time}] ${msg}\n` + el.innerText;
+	}catch(e){
+		// ignore
+	}
+}
+
 // ================= SAVE =================
 async function saveOnline(){
-  try{
+	// simple single-writer lock to avoid race conditions when saveOnline is called rapidly
+	if(_saveInProgress){
+		_savePending = true;
+		return;
+	}
 
-    console.log("SAVE DATA:", {
-  telegram_id: USER,
-  coins,
-  energy,
-  power: powerLv
-});
-await db
-  .from("users")
-  .upsert(
-    {
-      telegram_id: USER,
-      coins,
-      energy,
-      power: powerLv,
-      energy_lv: energyLv,
-      mine_lv: mineLv,
-      charge_lv: chargeLv,
-      max_energy: maxEnergy
-    },
-  );
+	_saveInProgress = true;
+	try{
+		updateDebugPanel('saveOnline() - USER: ' + String(USER));
+		console.log("SAVE DATA:", {
+			telegram_id: Number(USER),
+			coins,
+			energy,
+			power: powerLv,
+			max_energy: maxEnergy
+		});
+		updateDebugPanel('SAVE DATA: coins=' + String(coins) + ' energy=' + String(energy) + ' power=' + String(powerLv));
 
- console.log("saved:", USER, coins);
+		const minimalPayload = {
+			telegram_id: Number(USER),
+			coins: Number(coins),
+			energy: Number(energy),
+			power: Number(powerLv),
+			max_energy: Number(maxEnergy)
+		};
 
-  }catch(err){
-    console.log("save error", err);
-  }
+		// use array form and request representation so we get the saved row back
+		const { data, error, status } = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
+
+		if(error){
+			console.warn('supabase upsert error', status, error);
+			// try an update fallback (if upsert fails for some reason)
+			try{
+				const { data: d2, error: e2, status: s2 } = await db.from('users').update(minimalPayload).eq('telegram_id', Number(USER)).select();
+				if(e2) console.warn('supabase update fallback error', s2, e2);
+				else {
+					console.log('update fallback saved:', d2);
+					// sync local values to returned row if present
+					if(Array.isArray(d2) && d2[0]){
+						const row = d2[0];
+						coins = row.coins ?? coins;
+						energy = row.energy ?? energy;
+						localStorage.setItem('coins', String(coins));
+						localStorage.setItem('energy', String(energy));
+					}
+				}
+			}catch(ex){
+				console.error('update fallback unexpected error', ex);
+			}
+		} else {
+			console.log('saved (upsert):', USER, coins, data);
+			updateDebugPanel('saved (upsert) — telegram_id: ' + String(USER) + '\n' + JSON.stringify(data));
+			Telegram.WebApp && Telegram.WebApp.HapticFeedback && Telegram.WebApp.HapticFeedback.notificationOccurred && Telegram.WebApp.HapticFeedback.notificationOccurred("success");
+			// if server returned the saved row, sync it to localStorage to keep refresh stable
+			if(Array.isArray(data) && data[0]){
+				const row = data[0];
+				coins = row.coins ?? coins;
+				energy = row.energy ?? energy;
+				powerLv = row.power ?? powerLv;
+				maxEnergy = row.max_energy ?? maxEnergy;
+				localStorage.setItem('coins', String(coins));
+				localStorage.setItem('energy', String(energy));
+				localStorage.setItem('powerLv', String(powerLv));
+				localStorage.setItem('maxEnergy', String(maxEnergy));
+			}
+		}
+
+		// verify by selecting the row we just upserted and log it
+		try{
+			const { data: verifyRow, error: verifyErr } = await db.from('users').select('*').eq('telegram_id', Number(USER)).maybeSingle();
+			updateDebugPanel('verify select after saveOnline: ' + JSON.stringify(verifyRow) + ' err:' + String(verifyErr));
+		}catch(vE){
+			console.warn('verify select failed', vE);
+		}
+
+	}catch(err){
+		console.error('saveOnline unexpected error', err);
+	}finally{
+		_saveInProgress = false;
+		// if there was a pending save requested while we were saving, do one more
+		if(_savePending){
+			_savePending = false;
+			// schedule next tick so we don't recurse deeply
+			setTimeout(()=>saveOnline(), 50);
+		}
+	}
 }
 // ================= UI =================
 function render(){
@@ -108,6 +236,13 @@ function tryUpgrade(kind){
 	if(kind==='mine') mineLv++;
 	if(kind==='charge') chargeLv++;
 	recalcDerived();
+	// persist local changes immediately
+	localStorage.setItem('coins', String(coins));
+	localStorage.setItem('powerLv', String(powerLv));
+	localStorage.setItem('energyLv', String(energyLv));
+	localStorage.setItem('mineLv', String(mineLv));
+	localStorage.setItem('chargeLv', String(chargeLv));
+	localStorage.setItem('maxEnergy', String(maxEnergy));
 	render();
 	updateUpgradeUI();
     saveOnline();
@@ -184,6 +319,7 @@ function updateEnergyTimer(){
 	if(energy >= maxEnergy){
 		el.innerText = "";
 		energyTimerEnd = 0;
+		localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 		return;
 	}
 
@@ -195,8 +331,10 @@ function updateEnergyTimer(){
 		// if still under max, schedule next
 		if(energy < maxEnergy){
 			energyTimerEnd = now + ENERGY_INTERVAL * 1000;
+			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 		} else {
 			energyTimerEnd = 0;
+			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 		}
 		render();
 	}
@@ -217,6 +355,7 @@ updateEnergyTimer();
 // if energy not full and no timer stored, start timer now (so user waiting from now)
 if(energy < maxEnergy && !energyTimerEnd){
 	energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
+	localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 }
 
 // ================= THREE JS =================
@@ -358,27 +497,44 @@ renderer.render(scene,camera);
 animate();
 
 // ================= CLICK EFFECT =================
-document.getElementById("coin3d").onclick = () => {
-if(energy<=0) return;
+document.getElementById("coin3d").onclick = async () => {
+
+if(energy <= 0) return;
 
 coins += power;
 energy--;
-	if(energy < maxEnergy && !energyTimerEnd){
-		energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
-	}
 
-// pop
+if(energy < maxEnergy && !energyTimerEnd){
+	energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
+	localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+}
+
+// افکت
 coin.scale.set(1.1,1.1,1.1);
-setTimeout(()=>coin.scale.set(1,1,1),120);
 
-// particles burst
+setTimeout(()=>{
+	coin.scale.set(1,1,1);
+},120);
+
 spawnParticles();
 
-// micro punch (حس ضربه واقعی)
 camera.position.z = 5.75;
-setTimeout(()=>camera.position.z = 6,90);
+
+setTimeout(()=>{
+	camera.position.z = 6;
+},90);
 
 render();
+
+// ذخیره آنلاین
+// persist locally immediately so refresh has latest while we sync to server
+localStorage.setItem('coins', String(coins));
+localStorage.setItem('energy', String(energy));
+localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+
+// save to server (await so order is preserved)
+await saveOnline();
+
 };
 
 // ================= LOOP =================
@@ -386,12 +542,13 @@ setInterval(render,1000);
 render();
 async function loadOnline(){
   try{
+		console.log('loadOnline() - USER:', USER);
 
-const { data, error } = await db
-  .from("users")
-  .select("*")
-  .eq("telegram_id", USER)
-  .maybeSingle();
+		const { data, error } = await db
+	.from("users")
+	.select("*")
+	.eq("telegram_id", Number(USER))
+	.maybeSingle();
 
 if (error) {
   console.log("load error:", error);
@@ -414,9 +571,24 @@ if (!data) {
 
     maxEnergy = data.max_energy ?? 100;
 
-    render();
-    updateUpgradeUI();
-    updateEnergyTimer();
+	// persist loaded values locally so reloads show same state immediately
+	localStorage.setItem('coins', String(coins));
+	localStorage.setItem('energy', String(energy));
+	localStorage.setItem('powerLv', String(powerLv));
+	localStorage.setItem('energyLv', String(energyLv));
+	localStorage.setItem('mineLv', String(mineLv));
+	localStorage.setItem('chargeLv', String(chargeLv));
+	localStorage.setItem('maxEnergy', String(maxEnergy));
+
+recalcDerived();
+
+render();
+
+updateUpgradeUI();
+
+updateEnergyTimer();
+		updateDebugPanel('loadOnline() - USER: ' + String(USER));
+console.log("DATA LOADED:", data);
 
   }catch(e){
     console.log("load crash", e);
@@ -427,5 +599,12 @@ if (!data) {
   console.log("ALL USERS:", data);
   console.log("ERROR:", error);
 })();
-loadOnline();
+(async()=>{
+
+await loadOnline();
+
+render();
+
 updateEnergyTimer();
+
+})();
