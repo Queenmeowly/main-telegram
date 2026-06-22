@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FC Mini App</title>
+
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+</head>
+
+<body>
+
+<div class="bg"></div>
+
+<div class="container">
+
+  <div class="top">
+    <button id="menuBtn" aria-label="Menu">
+      <div class="hamburger"><span></span><span></span><span></span></div>
+    </button>
+    <div class="top-menu-items" aria-hidden="true">
+      <button id="menuProfile" class="top-menu-btn"><span class="icon">👤</span><span class="label">Profile</span></button>
+      <button id="menuStats" class="top-menu-btn"><span class="icon">📊</span><span class="label">Stats</span></button>
+      <button id="menuLeader" class="top-menu-btn"><span class="icon">🏆</span><span class="label">Leader Board</span></button>
+    </div>
+  </div>
+
+  <!-- side menu (hidden by default) -->
+  <div id="sideMenu" class="side-menu" aria-hidden="true">
+    <div class="side-content">
+      <button id="closeMenu" class="close">×</button>
+      <ul class="menu-list">
+        <li>Menu placeholder</li>
+        <li>Settings (coming)</li>
+        <li>Profile (coming)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="coinSection">
+
+    <div id="coinText">
+      <span id="coinsValue">0</span>
+      <span class="fc-unit">FC</span>
+    </div>
+
+    <div class="energy">
+      ⚡ <span id="energy"></span>
+    </div>
+
+  </div>
+
+  <div id="coin3d"></div>
+
+  <div class="stats">
+
+    <div class="card">
+      <div class="icon">🚀</div>
+      <div class="title">Power</div>
+      <div class="lvl">Lv <span id="powerLv">1</span></div>
+      <button id="upPower" class="btn">Upgrade <br><span id="powerPrice">10</span> FC</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">⚡</div>
+      <div class="title">Energy</div>
+      <div class="lvl">Lv <span id="energyLv">1</span></div>
+      <button id="upEnergy" class="btn">Upgrade <br><span id="energyPrice">30</span> FC</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">⛏</div>
+      <div class="title">Mine</div>
+      <div class="lvl">Lv <span id="mineLv">1</span></div>
+      <button id="upMine" class="btn">Upgrade <br><span id="minePrice">60</span> FC</button>
+    </div>
+
+    <div class="card">
+      <div class="icon">🔋</div>
+      <div class="title">Charge</div>
+      <div class="lvl">Lv <span id="chargeLv">1</span></div>
+      <button id="upCharge" class="btn">Upgrade <br><span id="chargePrice">80</span> FC</button>
+    </div>
+
+  </div>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/script.js"></script>
+
+</body>
+</html>
