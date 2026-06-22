@@ -9,51 +9,58 @@ SUPABASE_KEY
 
 // ================= TELEGRAM LOGIN =================
 
+console.log("INIT DATA:", window.Telegram?.WebApp?.initDataUnsafe);
+console.log("TG USER:", window.Telegram?.WebApp?.initDataUnsafe?.user);
+
 let USER = null;
 let USER_NAME = "";
 let USER_USERNAME = "";
 let USER_PHOTO = "";
 
 if (
-	window.Telegram &&
-	window.Telegram.WebApp &&
-	window.Telegram.WebApp.initDataUnsafe &&
-	window.Telegram.WebApp.initDataUnsafe.user
-){
+    window.Telegram &&
+    window.Telegram.WebApp &&
+    window.Telegram.WebApp.initDataUnsafe &&
+    window.Telegram.WebApp.initDataUnsafe.user
+) {
 
-	window.Telegram.WebApp.ready();
+    window.Telegram.WebApp.ready();
 
-	const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
+    const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
 
-	USER = String(tgUser.id);
-	USER_NAME = tgUser.first_name || "";
-	USER_USERNAME = tgUser.username || "";
-	USER_PHOTO = tgUser.photo_url || "";
+    USER = String(tgUser.id);
+    USER_NAME = tgUser.first_name || "";
+    USER_USERNAME = tgUser.username || "";
+    USER_PHOTO = tgUser.photo_url || "";
 
-	console.log("Telegram User:", USER, USER_NAME);
+    console.log("Telegram User:", USER, USER_NAME);
 
-}else{
+} else {
 
-	console.warn('Telegram WebApp not detected, fallback user');
+    console.warn("Telegram WebApp not detected, fallback user");
 
-	let stored = localStorage.getItem('user_id');
+    let stored = localStorage.getItem("user_id");
 
-	if(!stored){
-		stored = String(Date.now());
-		localStorage.setItem('user_id', stored);
-	}
+    if (!stored) {
+        stored = String(Date.now());
+        localStorage.setItem("user_id", stored);
+    }
 
-	USER = String(stored);
-
-	USER_NAME = "Test User";
-	USER_USERNAME = "test";
-	USER_PHOTO = "";
-
-	try{
-		updateDebugPanel('Fallback USER: ' + USER);
-	}catch(e){}
+    USER = String(stored);
+    USER_NAME = "Test User";
+    USER_USERNAME = "test";
+    USER_PHOTO = "";
 }
 
+// فقط این try باید بیرون باشه (درست و ساده)
+document.addEventListener("DOMContentLoaded", () => {
+    try {
+        updateDebugPanel("USER SET: " + USER + " | NAME: " + USER_NAME + " | USERNAME: " + USER_USERNAME);
+    } catch (e) {}
+});
+document.addEventListener("DOMContentLoaded", () => {
+  updateDebugPanel("USER SET: " + USER);
+});
 let coins = Number(localStorage.getItem('coins')) || 0;
 let energy = Number(localStorage.getItem('energy')) || 100;
 
@@ -178,7 +185,7 @@ telegram_id: USER,
 
 		// verify by selecting the row we just upserted and log it
 		try{
-			const { data: verifyRow, error: verifyErr } = await db.from('users').select('*').eq('telegram_id', Number(USER)).maybeSingle();
+			const { data: verifyRow, error: verifyErr } = await db.from('users').select('*').eq('telegram_id', USER).maybeSingle();
 			updateDebugPanel('verify select after saveOnline: ' + JSON.stringify(verifyRow) + ' err:' + String(verifyErr));
 		}catch(vE){
 			console.warn('verify select failed', vE);
@@ -230,29 +237,38 @@ function recalcDerived(){
 }
 
 function tryUpgrade(kind){
-	let lvlVar, setLvl;
-	if(kind==='power'){ lvlVar = powerLv; }
-	else if(kind==='energy'){ lvlVar = energyLv; }
-	else if(kind==='mine'){ lvlVar = mineLv; }
-	else if(kind==='charge'){ lvlVar = chargeLv; }
+	let lvlVar = 1;
+
+	if(kind==='power') lvlVar = powerLv;
+	else if(kind==='energy') lvlVar = energyLv;
+	else if(kind==='mine') lvlVar = mineLv;
+	else if(kind==='charge') lvlVar = chargeLv;
+	else return false;
+
 	const price = priceFor(kind, lvlVar);
+
 	if(coins < price) return false;
+
 	coins -= price;
+
 	if(kind==='power') powerLv++;
-	if(kind==='energy') energyLv++;
-	if(kind==='mine') mineLv++;
-	if(kind==='charge') chargeLv++;
+	else if(kind==='energy') energyLv++;
+	else if(kind==='mine') mineLv++;
+	else if(kind==='charge') chargeLv++;
+
 	recalcDerived();
-	// persist local changes immediately
+
 	localStorage.setItem('coins', String(coins));
 	localStorage.setItem('powerLv', String(powerLv));
 	localStorage.setItem('energyLv', String(energyLv));
 	localStorage.setItem('mineLv', String(mineLv));
 	localStorage.setItem('chargeLv', String(chargeLv));
 	localStorage.setItem('maxEnergy', String(maxEnergy));
+
 	render();
 	updateUpgradeUI();
-    saveOnline();
+	saveOnline();
+
 	return true;
 }
 
