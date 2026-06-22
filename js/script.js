@@ -132,12 +132,15 @@ telegram_id: USER,
 
 		if(error){
 			console.warn('supabase upsert error', status, error);
+			updateDebugPanel('supabase upsert error: ' + status + ' ' + JSON.stringify(error));
 			// try an update fallback (if upsert fails for some reason)
 			try{
-				const { data: d2, error: e2, status: s2 } = await db.from('users').update(minimalPayload).eq('telegram_id', Number(USER)).select();
+				const { data: d2, error: e2, status: s2 } = await db.from('users').update(minimalPayload).eq('telegram_id', USER).select();
 				if(e2) console.warn('supabase update fallback error', s2, e2);
+				if(e2) updateDebugPanel('supabase update fallback error: ' + s2 + ' ' + JSON.stringify(e2));
 				else {
 					console.log('update fallback saved:', d2);
+					updateDebugPanel('update fallback saved: ' + JSON.stringify(d2));
 					// sync local values to returned row if present
 					if(Array.isArray(d2) && d2[0]){
 						const row = d2[0];
