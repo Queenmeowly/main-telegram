@@ -339,6 +339,8 @@ function updateEnergyTimer(){
 	ensureEnergyTimerElement();
 	const el = document.getElementById("energyTimer");
 
+	const now = Date.now();
+
 	if(energy >= maxEnergy){
 		el.innerText = "";
 		energyTimerEnd = 0;
@@ -346,7 +348,17 @@ function updateEnergyTimer(){
 		return;
 	}
 
-	const now = Date.now();
+	// if energy is below max and there's no active timer, restore from storage or start a new one
+	if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
+		const stored = Number(localStorage.getItem('energyTimerEnd')) || 0;
+		if(stored && stored > now){
+			energyTimerEnd = stored;
+		} else {
+			energyTimerEnd = now + ENERGY_INTERVAL * 1000;
+			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+		}
+	}
+
 	// only grant when a timer is active and it has reached 0
 	if(energyTimerEnd && energyTimerEnd <= now){
 		// grant energy (amount = energyLv)
