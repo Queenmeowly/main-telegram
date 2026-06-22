@@ -235,7 +235,8 @@ function updateUpgradeUI(){
 
 function recalcDerived(){
 	power = powerLv; // simple: 1 coin per power level
-	maxEnergy = 100 + (energyLv-1)*10;
+	// maxEnergy is controlled by charge level: level1 => 100, level2 => 101, etc.
+	maxEnergy = 100 + (chargeLv - 1);
 	// amount of energy granted each interval equals energy level
 	energyGain = energyLv;
 }
