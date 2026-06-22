@@ -499,45 +499,50 @@ renderer.render(scene,camera);
 animate();
 
 // ================= CLICK EFFECT =================
-document.getElementById("coin3d").onclick = async () => {
+// Attach interactive handlers safely (call after DOM ready)
+function attachHandlers(){
+	const el = document.getElementById("coin3d");
+	if(el){
+		el.onclick = async () => {
+			try{
+				if(energy <= 0) return;
 
-if(energy <= 0) return;
+				coins += power;
+				energy--;
 
-coins += power;
-energy--;
+				if(energy < maxEnergy && !energyTimerEnd){
+					energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
+					localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+				}
 
-if(energy < maxEnergy && !energyTimerEnd){
-	energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
-	localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+				// افکت
+				coin.scale.set(1.1,1.1,1.1);
+				setTimeout(()=>{ coin.scale.set(1,1,1); },120);
+
+				spawnParticles();
+
+				camera.position.z = 5.75;
+				setTimeout(()=>{ camera.position.z = 6; },90);
+
+				render();
+
+				// persist locally immediately so refresh has latest while we sync to server
+				localStorage.setItem('coins', String(coins));
+				localStorage.setItem('energy', String(energy));
+				localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+
+				// save to server (await so order is preserved)
+				await saveOnline();
+			}catch(err){
+				console.error('coin click handler error', err);
+				updateDebugPanel('coin click handler error: ' + String(err));
+			}
+		};
+	}
 }
 
-// افکت
-coin.scale.set(1.1,1.1,1.1);
-
-setTimeout(()=>{
-	coin.scale.set(1,1,1);
-},120);
-
-spawnParticles();
-
-camera.position.z = 5.75;
-
-setTimeout(()=>{
-	camera.position.z = 6;
-},90);
-
-render();
-
-// ذخیره آنلاین
-// persist locally immediately so refresh has latest while we sync to server
-localStorage.setItem('coins', String(coins));
-localStorage.setItem('energy', String(energy));
-localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-
-// save to server (await so order is preserved)
-await saveOnline();
-
-};
+// ensure handlers attach when DOM is ready
+document.addEventListener('DOMContentLoaded', attachHandlers);
 
 // ================= LOOP =================
 setInterval(render,1000);
@@ -607,8 +612,20 @@ await loadOnline();
 
 render();
 
-await saveOnline();
+// attach handlers in case DOM was already ready or will be
+try{ attachHandlers(); }catch(e){}
+
+// try to save once after load to ensure DB row exists
+try{ await saveOnline(); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
 
 updateEnergyTimer();
 
 })();
+
+// global error handlers (show in debug panel for Telegram WebView)
+window.addEventListener('error', (ev)=>{
+	try{ updateDebugPanel('Uncaught error: '+ (ev && ev.message ? ev.message : String(ev))); }catch(e){}
+});
+window.addEventListener('unhandledrejection', (ev)=>{
+	try{ updateDebugPanel('Unhandled rejection: '+ String(ev && ev.reason ? ev.reason : ev)); }catch(e){}
+});
