@@ -361,16 +361,32 @@ function updateEnergyTimer(){
 
 	// only grant when a timer is active and it has reached 0
 	if(energyTimerEnd && energyTimerEnd <= now){
-		// grant energy (amount = energyLv)
-		energy = Math.min(maxEnergy, energy + (typeof energyGain !== 'undefined' ? energyGain : energyLv));
-		// if still under max, schedule next
+		const intervalMs = ENERGY_INTERVAL * 1000;
+		// how many intervals have passed since the scheduled next grant
+		const passedMs = now - energyTimerEnd;
+		const intervalsPassed = 1 + Math.floor(passedMs / intervalMs);
+		const gainPer = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
+		const totalGain = intervalsPassed * gainPer;
+
+		const prevEnergy = energy;
+		energy = Math.min(maxEnergy, energy + totalGain);
+
 		if(energy < maxEnergy){
-			energyTimerEnd = now + ENERGY_INTERVAL * 1000;
+			// schedule next grant after the intervals that already passed
+			energyTimerEnd = energyTimerEnd + intervalsPassed * intervalMs;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 		} else {
+			// reached max — clear timer
 			energyTimerEnd = 0;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 		}
+
+		// if energy changed, persist locally and try to save online
+		if(energy !== prevEnergy){
+			localStorage.setItem('energy', String(energy));
+			try{ saveOnline(); }catch(e){}
+		}
+
 		render();
 	}
 
