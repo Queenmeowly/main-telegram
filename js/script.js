@@ -403,11 +403,8 @@ function updateEnergyTimer(){
 setInterval(updateEnergyTimer, 1000);
 updateEnergyTimer();
 
-// if energy not full and no timer stored, start timer now (so user waiting from now)
-if(energy < maxEnergy && !energyTimerEnd){
-	energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
-	localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-}
+// NOTE: remove immediate startup fallback here — timer should be derived from stored value or server
+// (we set/restore `energyTimerEnd` inside `loadOnline()` to preserve continuity across refreshes).
 
 // ================= THREE JS =================
 const scene = new THREE.Scene();
@@ -626,29 +623,44 @@ if (!data) {
     chargeLv = data.charge_lv ?? 1;
 
     maxEnergy = data.max_energy ?? 100;
-
-		// If server provides a `last_grant` timestamp, compute offline gains
+		// restore or compute a proper energyTimerEnd so countdown continues across refreshes and while offline
 		try{
-			if(data.last_grant){
+			const now = Date.now();
+
+			// 1) Prefer local stored timer if valid
+			const stored = Number(localStorage.getItem('energyTimerEnd')) || 0;
+			if(stored && stored > now){
+				energyTimerEnd = stored;
+			} else if(data.last_grant){
+				// 2) If server provided last_grant, compute next timer based on that
 				const last = Date.parse(data.last_grant);
 				if(!isNaN(last)){
-					const now = Date.now();
 					const intervalMs = ENERGY_INTERVAL * 1000;
 					const passedMs = Math.max(0, now - last);
 					const intervalsPassed = Math.floor(passedMs / intervalMs);
-					if(intervalsPassed > 0){
-						const gainPer = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
-						const totalGain = intervalsPassed * gainPer;
+					// next scheduled grant time after last_grant
+					energyTimerEnd = last + (intervalsPassed + 1) * intervalMs;
+					// if the computed time is already passed, clamp by adding one interval
+					if(energyTimerEnd <= now) energyTimerEnd = now + intervalMs;
+					localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+					// Also apply missed grants immediately (keep offline accumulation)
+					const gainPer = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
+					const totalIntervals = intervalsPassed;
+					if(totalIntervals > 0){
+						const totalGain = totalIntervals * gainPer;
 						const before = energy;
 						energy = Math.min(maxEnergy, energy + totalGain);
 						localStorage.setItem('energy', String(energy));
 						updateDebugPanel('Applied offline gain from last_grant: +' + totalGain + ' energy');
-						// persist updated energy to server (will update `energy` column). Do not attempt to write last_grant here.
 						try{ await saveOnline(); }catch(e){ updateDebugPanel('save after offline apply failed: ' + String(e)); }
 					}
 				}
+			} else if(energy < maxEnergy){
+				// 3) fallback: if nothing stored and no server info, start a timer now
+				energyTimerEnd = now + ENERGY_INTERVAL * 1000;
+				localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 			}
-		}catch(ex){ console.warn('offline apply failed', ex); }
+		}catch(ex){ console.warn('energyTimer restore failed', ex); }
 
 	// persist loaded values locally so reloads show same state immediately
 	localStorage.setItem('coins', String(coins));
