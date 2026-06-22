@@ -61,6 +61,8 @@ document.addEventListener("DOMContentLoaded", () => {
 document.addEventListener("DOMContentLoaded", () => {
   updateDebugPanel("USER SET: " + USER);
 });
+// Disable on-screen debug panel inside Telegram WebApp (it covers the view). Enable for normal browser testing.
+const DEBUG_PANEL_ENABLED = !(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user);
 let coins = Number(localStorage.getItem('coins')) || 0;
 let energy = Number(localStorage.getItem('energy')) || 100;
 
@@ -83,6 +85,7 @@ let _savePending = false;
 
 // Debug/status panel for environments without a console (Telegram WebView)
 function ensureDebugPanel(){
+    if(!DEBUG_PANEL_ENABLED) return;
 	if(document.getElementById('saveStatus')) return;
 	const d = document.createElement('div');
 	d.id = 'saveStatus';
@@ -102,6 +105,7 @@ function ensureDebugPanel(){
 }
 
 function updateDebugPanel(msg){
+	if(!DEBUG_PANEL_ENABLED) return;
 	try{
 		ensureDebugPanel();
 		const el = document.getElementById('saveStatusBody');
