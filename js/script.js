@@ -278,7 +278,8 @@ function tryUpgrade(kind){
 }
 
 // hook buttons (if present)
-document.addEventListener('DOMContentLoaded', ()=>{
+// Attach upgrade button handlers reliably (works even if DOMContentLoaded already fired)
+function attachUpgradeButtons(){
 	const upPower = document.getElementById('upPower'); if(upPower) upPower.onclick = ()=> tryUpgrade('power');
 	const upEnergy = document.getElementById('upEnergy'); if(upEnergy) upEnergy.onclick = ()=> tryUpgrade('energy');
 	const upMine = document.getElementById('upMine'); if(upMine) upMine.onclick = ()=> tryUpgrade('mine');
@@ -315,7 +316,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
 	const menuProfile = document.getElementById('menuProfile'); if(menuProfile) menuProfile.onclick = ()=>{ alert('Profile (placeholder)'); document.body.classList.remove('menu-open'); };
 	const menuStats = document.getElementById('menuStats'); if(menuStats) menuStats.onclick = ()=>{ alert('Stats (placeholder)'); document.body.classList.remove('menu-open'); };
 	const menuLeader = document.getElementById('menuLeader'); if(menuLeader) menuLeader.onclick = ()=>{ alert('Leader Board (placeholder)'); document.body.classList.remove('menu-open'); };
-});
+}
+
+// ensure handlers attach when DOM is ready
+if(document.readyState === 'loading'){
+	document.addEventListener('DOMContentLoaded', ()=>{ attachUpgradeButtons(); });
+} else {
+	// already ready
+	attachUpgradeButtons();
+}
 // ensure derived stats and UI reflect persisted levels immediately
 recalcDerived();
 updateUpgradeUI();
