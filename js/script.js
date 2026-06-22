@@ -32,20 +32,19 @@ if (
 
 }else{
 
-	document.body.innerHTML = `
-	<div style="
-	padding:30px;
-	color:white;
-	text-align:center;
-	font-size:20px;
-	">
-	❌ Please open inside Telegram
-	</div>
-	`;
-
-	throw new Error(
-		"Open inside Telegram"
-	);
+		// Not inside Telegram environment — fall back to a local test user so the UI still works
+		console.warn('Telegram WebApp not detected, falling back to local user id');
+		// try to reuse stored id or create one
+		let stored = localStorage.getItem('user_id');
+		if(!stored){
+			stored = String(Date.now());
+			localStorage.setItem('user_id', stored);
+		}
+		USER = String(stored);
+		// show small badge for debugging
+		try{
+			updateDebugPanel('Telegram not found; using fallback USER: ' + String(USER));
+		}catch(e){}
 
 }
 
