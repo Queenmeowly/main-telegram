@@ -112,8 +112,7 @@ async function saveOnline(){
 	try{
 		updateDebugPanel('saveOnline() - USER: ' + String(USER));
 		console.log("SAVE DATA:", {
-			telegram_id: Number(USER),
-			coins,
+telegram_id: USER,			coins,
 			energy,
 			power: powerLv,
 			max_energy: maxEnergy
@@ -121,7 +120,7 @@ async function saveOnline(){
 		updateDebugPanel('SAVE DATA: coins=' + String(coins) + ' energy=' + String(energy) + ' power=' + String(powerLv));
 
 		const minimalPayload = {
-			telegram_id: Number(USER),
+telegram_id: USER,
 			coins: Number(coins),
 			energy: Number(energy),
 			power: Number(powerLv),
@@ -547,7 +546,7 @@ async function loadOnline(){
 		const { data, error } = await db
 	.from("users")
 	.select("*")
-	.eq("telegram_id", Number(USER))
+.eq("telegram_id", USER)
 	.maybeSingle();
 
 if (error) {
@@ -605,7 +604,8 @@ await loadOnline();
 
 render();
 
+await saveOnline();
+
 updateEnergyTimer();
 
 })();
-
