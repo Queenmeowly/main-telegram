@@ -10,6 +10,9 @@ SUPABASE_KEY
 // ================= TELEGRAM LOGIN =================
 
 let USER = null;
+let USER_NAME = "";
+let USER_USERNAME = "";
+let USER_PHOTO = "";
 
 if (
 	window.Telegram &&
@@ -20,32 +23,35 @@ if (
 
 	window.Telegram.WebApp.ready();
 
-	USER =
-	String(
-		window.Telegram.WebApp.initDataUnsafe.user.id
-	);
+	const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
 
-	console.log(
-		"Telegram User:",
-		USER
-	);
+	USER = String(tgUser.id);
+	USER_NAME = tgUser.first_name || "";
+	USER_USERNAME = tgUser.username || "";
+	USER_PHOTO = tgUser.photo_url || "";
+
+	console.log("Telegram User:", USER, USER_NAME);
 
 }else{
 
-		// Not inside Telegram environment — fall back to a local test user so the UI still works
-		console.warn('Telegram WebApp not detected, falling back to local user id');
-		// try to reuse stored id or create one
-		let stored = localStorage.getItem('user_id');
-		if(!stored){
-			stored = String(Date.now());
-			localStorage.setItem('user_id', stored);
-		}
-		USER = String(stored);
-		// show small badge for debugging
-		try{
-			updateDebugPanel('Telegram not found; using fallback USER: ' + String(USER));
-		}catch(e){}
+	console.warn('Telegram WebApp not detected, fallback user');
 
+	let stored = localStorage.getItem('user_id');
+
+	if(!stored){
+		stored = String(Date.now());
+		localStorage.setItem('user_id', stored);
+	}
+
+	USER = String(stored);
+
+	USER_NAME = "Test User";
+	USER_USERNAME = "test";
+	USER_PHOTO = "";
+
+	try{
+		updateDebugPanel('Fallback USER: ' + USER);
+	}catch(e){}
 }
 
 let coins = Number(localStorage.getItem('coins')) || 0;
