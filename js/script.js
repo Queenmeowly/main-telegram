@@ -627,6 +627,29 @@ if (!data) {
 
     maxEnergy = data.max_energy ?? 100;
 
+		// If server provides a `last_grant` timestamp, compute offline gains
+		try{
+			if(data.last_grant){
+				const last = Date.parse(data.last_grant);
+				if(!isNaN(last)){
+					const now = Date.now();
+					const intervalMs = ENERGY_INTERVAL * 1000;
+					const passedMs = Math.max(0, now - last);
+					const intervalsPassed = Math.floor(passedMs / intervalMs);
+					if(intervalsPassed > 0){
+						const gainPer = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
+						const totalGain = intervalsPassed * gainPer;
+						const before = energy;
+						energy = Math.min(maxEnergy, energy + totalGain);
+						localStorage.setItem('energy', String(energy));
+						updateDebugPanel('Applied offline gain from last_grant: +' + totalGain + ' energy');
+						// persist updated energy to server (will update `energy` column). Do not attempt to write last_grant here.
+						try{ await saveOnline(); }catch(e){ updateDebugPanel('save after offline apply failed: ' + String(e)); }
+					}
+				}
+			}
+		}catch(ex){ console.warn('offline apply failed', ex); }
+
 	// persist loaded values locally so reloads show same state immediately
 	localStorage.setItem('coins', String(coins));
 	localStorage.setItem('energy', String(energy));
