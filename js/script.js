@@ -136,16 +136,25 @@ telegram_id: USER,
 		}
 
 		// use array form and request representation so we get the saved row back
-		const { data, error, status } = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
+		let data, error, status;
+		try{
+			const resp = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
+			data = resp.data; error = resp.error; status = resp.status;
+		}catch(netErr){
+			console.error('saveOnline network exception', netErr);
+			showSaveBanner('Save network error: ' + (netErr && netErr.message ? netErr.message : String(netErr)), true);
+			throw netErr;
+		}
 
 		if(error){
 			console.warn('supabase upsert error', status, error);
+			showSaveBanner('Save failed: ' + status + ' ' + (error && error.message ? error.message : JSON.stringify(error)), true);
 			updateDebugPanel('supabase upsert error: ' + status + ' ' + JSON.stringify(error));
 			// try an update fallback (if upsert fails for some reason)
 			try{
 				const { data: d2, error: e2, status: s2 } = await db.from('users').update(minimalPayload).eq('telegram_id', USER).select();
 				if(e2) console.warn('supabase update fallback error', s2, e2);
-				if(e2) updateDebugPanel('supabase update fallback error: ' + s2 + ' ' + JSON.stringify(e2));
+				if(e2) { updateDebugPanel('supabase update fallback error: ' + s2 + ' ' + JSON.stringify(e2)); showSaveBanner('Update fallback failed: ' + s2 + ' ' + (e2 && e2.message ? e2.message : JSON.stringify(e2)), true); }
 				else {
 					console.log('update fallback saved:', d2);
 					updateDebugPanel('update fallback saved: ' + JSON.stringify(d2));
@@ -180,6 +189,8 @@ telegram_id: USER,
 				localStorage.setItem('maxEnergy', String(maxEnergy));
 					// successful save — clear pending last_grant
 					_pendingLastGrant = null;
+					// show a subtle success banner (non-intrusive)
+					try{ showSaveBanner('Saved', false); }catch(e){}
 			}
 		}
 
