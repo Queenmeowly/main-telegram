@@ -195,16 +195,26 @@ async function saveOnline(){
 		// use array form and request representation so we get the saved row back
 		let data, error, status;
 		try{
+			console.log('saveOnline: saving payload', minimalPayload, 'USER=', USER);
 			const resp = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
+			console.log('saveOnline: upsert response', resp);
 			data = resp.data; error = resp.error; status = resp.status;
 		}catch(netErr){
 			console.error('saveOnline network exception', netErr);
 			showSaveBanner('Save network error: ' + (netErr && netErr.message ? netErr.message : String(netErr)), true);
+			// surface to debug panel as well
+			updateDebugPanel('saveOnline network exception: ' + String(netErr));
 			throw netErr;
 		}
 
 		if(error){
 			console.warn('supabase upsert error', status, error);
+			console.log('saveOnline payload was', minimalPayload);
+			// if 401/403 likely RLS or auth issue
+			if(status === 401 || status === 403){
+				showSaveBanner('Save failed: permission denied (RLS / API key). Check Supabase policies.', true);
+				updateDebugPanel('supabase upsert permission error: ' + status + ' ' + JSON.stringify(error));
+			}
 			// if the error is a missing column in the schema (e.g. energy_timer_end), remove the field and retry once
 			try{
 				const msg = (error && error.message) ? String(error.message) : '';
@@ -230,7 +240,7 @@ async function saveOnline(){
 				if(e2) console.warn('supabase update fallback error', s2, e2);
 				if(e2) { updateDebugPanel('supabase update fallback error: ' + s2 + ' ' + JSON.stringify(e2)); showSaveBanner('Update fallback failed: ' + s2 + ' ' + (e2 && e2.message ? e2.message : JSON.stringify(e2)), true); }
 				else {
-					console.log('update fallback saved:', d2);
+					console.log('update fallback saved (rows):', Array.isArray(d2) ? d2.length : d2, d2);
 					updateDebugPanel('update fallback saved: ' + JSON.stringify(d2));
 					// sync local values to returned row if present
 					if(Array.isArray(d2) && d2[0]){
@@ -241,6 +251,28 @@ async function saveOnline(){
 						localStorage.setItem('energy', String(energy));
 						// update succeeded — clear pending last_grant so we don't resend it
 						_pendingLastGrant = null;
+					} else {
+						// update affected no rows — try insert as last resort
+						try{
+							console.log('update affected no rows, trying insert fallback');
+							const { data: insData, error: insErr, status: insStatus } = await db.from('users').insert([minimalPayload]);
+							if(insErr){
+								console.warn('insert fallback error', insStatus, insErr);
+								updateDebugPanel('insert fallback error: ' + insStatus + ' ' + JSON.stringify(insErr));
+								showSaveBanner('Insert fallback failed: ' + insStatus, true);
+							} else {
+								console.log('insert fallback saved:', insData);
+								updateDebugPanel('insert fallback saved: ' + JSON.stringify(insData));
+								if(Array.isArray(insData) && insData[0]){
+									coins = insData[0].coins ?? coins;
+									energy = insData[0].energy ?? energy;
+									localStorage.setItem('coins', String(coins));
+									localStorage.setItem('energy', String(energy));
+									_pendingLastGrant = null;
+									try{ showSaveBanner('Saved to DB (insert)', false); }catch(e){}
+								}
+							}
+						}catch(insEx){ console.error('insert fallback unexpected error', insEx); updateDebugPanel('insert fallback error: '+String(insEx)); }
 					}
 				}
 			}catch(ex){ console.error('update fallback unexpected error', ex); }
@@ -261,7 +293,7 @@ async function saveOnline(){
 				localStorage.setItem('maxEnergy', String(maxEnergy));
 				// successful save — clear pending last_grant
 				_pendingLastGrant = null;
-				try{ showSaveBanner('Saved', false); }catch(e){}
+				try{ showSaveBanner('Saved to DB', false); }catch(e){}
 			}
 		}
 
