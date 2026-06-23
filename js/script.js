@@ -148,8 +148,27 @@ telegram_id: USER,
 
 		if(error){
 			console.warn('supabase upsert error', status, error);
-			showSaveBanner('Save failed: ' + status + ' ' + (error && error.message ? error.message : JSON.stringify(error)), true);
-			updateDebugPanel('supabase upsert error: ' + status + ' ' + JSON.stringify(error));
+			// if the error is a missing column in the schema (e.g. energy_timer_end), remove the field and retry once
+			try{
+				const msg = (error && error.message) ? String(error.message) : '';
+				const m = msg.match(/Could not find the '([^']+)' column/);
+				if(m && m[1] && minimalPayload[m[1]] !== undefined){
+					const col = m[1];
+					console.log('Schema missing column reported:', col, '— retrying without that field');
+					delete minimalPayload[col];
+					try{
+						const resp2 = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
+						data = resp2.data; error = resp2.error; status = resp2.status;
+					}catch(e2){
+						console.error('retry upsert after removing missing column failed', e2);
+					}
+				}
+			}catch(ignore){}
+
+			if(error){
+				showSaveBanner('Save failed: ' + status + ' ' + (error && error.message ? error.message : JSON.stringify(error)), true);
+				updateDebugPanel('supabase upsert error: ' + status + ' ' + JSON.stringify(error));
+			}
 			// try an update fallback (if upsert fails for some reason)
 			try{
 				const { data: d2, error: e2, status: s2 } = await db.from('users').update(minimalPayload).eq('telegram_id', USER).select();
