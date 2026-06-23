@@ -228,7 +228,12 @@ const minimalPayload = {
   first_name: USER_NAME,
   username: USER_USERNAME,
 
-  season: "1"
+season:"1",
+
+last_modified:
+new Date().toISOString()
+  
+
 };
 
 		// include local lastModified so server can decide which version is newest
@@ -255,7 +260,6 @@ const minimalPayload = {
 onConflict:'telegram_id'
 })
 .select()
-.single();
 			console.log('saveOnline: upsert response', resp);
 			data = resp.data; error = resp.error; status = resp.status;
 
@@ -366,7 +370,14 @@ onConflict:'telegram_id'
 							} else {
 								console.log('insert fallback saved:', insData);
 								updateDebugPanel('insert fallback saved: ' + JSON.stringify(insData));
-								if(Array.isArray(insData) && insData[0]){
+if(insData){
+const row =
+Array.isArray(insData)
+? insData[0]
+: insData;
+
+coins=row.coins??coins;
+energy=row.energy??energy;
 									coins = insData[0].coins ?? coins;
 									energy = insData[0].energy ?? energy;
 									localStorage.setItem('coins', String(coins));
@@ -384,12 +395,13 @@ onConflict:'telegram_id'
 			updateDebugPanel('saved (upsert) — telegram_id: ' + String(USER) + '\n' + JSON.stringify(data));
 			Telegram.WebApp && Telegram.WebApp.HapticFeedback && Telegram.WebApp.HapticFeedback.notificationOccurred && Telegram.WebApp.HapticFeedback.notificationOccurred("success");
 			// if server returned the saved row, sync it to localStorage to keep refresh stable
-			if(Array.isArray(data) && data[0]){
-				const row = data[0];
-				coins = row.coins ?? coins;
-				energy = row.energy ?? energy;
-				powerLv = row.power ?? powerLv;
-				maxEnergy = row.max_energy ?? maxEnergy;
+if(data){
+const row = Array.isArray(data) ? data[0] : data;
+
+coins = row.coins ?? coins;
+energy = row.energy ?? energy;
+powerLv = row.power ?? powerLv;
+maxEnergy = row.max_energy ?? maxEnergy;
 				// persist snapshot using original setter so it's available across reloads
 				setLocalItem('coins', String(coins));
 				setLocalItem('energy', String(energy));
