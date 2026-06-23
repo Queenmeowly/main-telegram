@@ -193,6 +193,8 @@ telegram_id: USER,
 
 	}catch(err){
 		console.error('saveOnline unexpected error', err);
+		// show visible banner inside the app so Telegram WebView users see save failures
+		try{ showSaveBanner('Save failed: ' + (err && err.message ? err.message : String(err)), true); }catch(e){}
 	}finally{
 		_saveInProgress = false;
 		// if there was a pending save requested while we were saving, do one more
@@ -203,6 +205,41 @@ telegram_id: USER,
 		}
 	}
 }
+
+// small visible banner for displaying save errors/successes inside the WebApp
+function showSaveBanner(msg, isError){
+	try{
+		let b = document.getElementById('__save_banner');
+		if(!b){
+			b = document.createElement('div');
+			b.id = '__save_banner';
+			b.style.position = 'fixed';
+			b.style.left = '12px';
+			b.style.right = '12px';
+			b.style.top = '12px';
+			b.style.zIndex = 999999;
+			b.style.padding = '10px 14px';
+			b.style.borderRadius = '10px';
+			b.style.fontWeight = '700';
+			b.style.backdropFilter = 'blur(6px)';
+			b.style.boxShadow = '0 10px 30px rgba(0,0,0,0.45)';
+			document.body.appendChild(b);
+		}
+		b.innerText = msg;
+		b.style.background = isError ? 'linear-gradient(90deg,#ff6b6b,#ff8a80)' : 'linear-gradient(90deg,#7af27a,#3ee23e)';
+		b.style.color = isError ? '#210101' : '#042004';
+		b.style.transition = 'opacity .22s ease';
+		b.style.opacity = '1';
+		clearTimeout(b.__hideTimer);
+		b.__hideTimer = setTimeout(()=>{ try{ b.style.opacity='0'; }catch(e){} }, 3500);
+	}catch(e){ console.warn('showSaveBanner failed', e); }
+}
+
+// Autosave frequently so Telegram WebApp usage persists moment-to-moment
+const AUTOSAVE_INTERVAL_MS = 15 * 1000;
+setInterval(()=>{
+	try{ saveOnline(); }catch(e){}
+}, AUTOSAVE_INTERVAL_MS);
 // ================= UI =================
 function render(){
 document.getElementById("coinsValue").innerText = coins;
