@@ -94,7 +94,11 @@ if (
 
 	if(!stored){
 		stored = String(Date.now());
-		localStorage.setItem("user_id", stored);
+		if(localStorage._original_setItem){
+			try{ localStorage._original_setItem.call(localStorage, "user_id", stored); }catch(e){ localStorage.setItem("user_id", stored); }
+		} else {
+			localStorage.setItem("user_id", stored);
+		}
 	}
 
 	// when Telegram WebApp is not available, use a local persistent id as USER
@@ -805,6 +809,33 @@ function enhanceUI(){
 	const ids = ['upPower','upEnergy','upMine','upCharge','menuBtn','menuProfile','menuStats','menuLeader'];
 	ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.add('glow-btn'); });
 	const timer = document.getElementById('energyTimer'); if(timer) timer.classList.add('pulse');
+}
+// add a small debug control for testing DB saves
+function addDebugControls(){
+	if(document.getElementById('__db_test_btn')) return;
+	const btn = document.createElement('button');
+	btn.id = '__db_test_btn';
+	btn.innerText = 'Test DB Save';
+	btn.style.position = 'fixed';
+	btn.style.right = '12px';
+	btn.style.bottom = '12px';
+	btn.style.zIndex = 9999999;
+	btn.style.padding = '8px 12px';
+	btn.style.borderRadius = '8px';
+	btn.style.background = '#ffd54d';
+	btn.style.border = 'none';
+	btn.style.cursor = 'pointer';
+	btn.onclick = async ()=>{
+		try{
+			showSaveBanner('Testing DB save...', false);
+			await saveOnline();
+			showSaveBanner('Test save completed. Check DB dashboard.', false);
+		}catch(e){
+			showSaveBanner('Test save failed: ' + (e && e.message ? e.message : String(e)), true);
+			updateDebugPanel('Test save error: ' + String(e));
+		}
+	};
+	document.body.appendChild(btn);
 }
 function attachHandlers(){
 	const el = document.getElementById("coin3d");
