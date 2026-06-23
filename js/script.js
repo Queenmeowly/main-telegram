@@ -88,6 +88,10 @@ if (
 		localStorage.setItem("user_id", stored);
 	}
 
+	// when Telegram WebApp is not available, use a local persistent id as USER
+	USER = String(stored);
+	USER_NAME = 'guest';
+
 	function updateEnergyTimer(){
 		ensureEnergyTimerElement();
 		const el = document.getElementById("energyTimer");
@@ -833,15 +837,26 @@ if (!data) {
   return;
 }
 
-    coins = data.coins ?? 0;
-    energy = data.energy ?? 100;
+		// resolve server vs local using last_modified timestamps
+		const serverModified = data && data.last_modified ? Date.parse(data.last_modified) : 0;
+		// if server has newer data, accept it; if local is newer, push local to server
+		if(serverModified && serverModified > lastModified){
+			coins = data.coins ?? coins;
+			energy = data.energy ?? energy;
 
-    powerLv = data.power ?? 1;
-    energyLv = data.energy_lv ?? 1;
-    mineLv = data.mine_lv ?? 1;
-    chargeLv = data.charge_lv ?? 1;
+			powerLv = data.power ?? powerLv;
+			energyLv = data.energy_lv ?? energyLv;
+			mineLv = data.mine_lv ?? mineLv;
+			chargeLv = data.charge_lv ?? chargeLv;
 
-    maxEnergy = data.max_energy ?? 100;
+			maxEnergy = data.max_energy ?? maxEnergy;
+			// update local lastModified to server's
+			lastModified = serverModified;
+			localStorage.setItem('lastModified', String(lastModified));
+		} else {
+			// local state is newer (or server has no timestamp) -> push local to server
+			try{ await saveOnline(); }catch(e){ console.warn('initial push after load failed', e); }
+		}
 		// restore or compute a proper energyTimerEnd so countdown continues across refreshes and while offline
 		try{
 			const now = Date.now();
