@@ -115,6 +115,9 @@ if (
 
 	console.log("Telegram User:", USER, USER_NAME);
 
+	// normalize USER to numeric when possible to match DB numeric telegram_id columns
+	if(!isNaN(Number(USER))){ USER = Number(USER); }
+
 } else {
 
 	console.warn("Telegram WebApp not detected, fallback user");
@@ -133,6 +136,9 @@ if (
 	// when Telegram WebApp is not available, use a local persistent id as USER
 	USER = String(stored);
 	USER_NAME = 'guest';
+
+	// normalize guest id if it's numeric-like (rare)
+	if(!isNaN(Number(USER))){ USER = Number(USER); }
 
 	function updateEnergyTimer(){
 		ensureEnergyTimerElement();
@@ -213,7 +219,8 @@ async function saveOnline(){
 	_saveInProgress = true;
 	try{
 const minimalPayload = {
-  telegram_id: USER,
+	// try to use numeric id when possible so DB equality matches numeric columns
+	telegram_id: (isNaN(Number(USER)) ? USER : Number(USER)),
 
   coins: Number(coins),
   energy: Number(energy),
@@ -252,6 +259,50 @@ const minimalPayload = {
 			const resp = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
 			console.log('saveOnline: upsert response', resp);
 			data = resp.data; error = resp.error; status = resp.status;
+
+			// If upsert returned no data or an error, attempt a raw REST fallback
+			async function tryRestFallback(payload){
+				try{
+					const url = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/users';
+					const resp = await fetch(url, {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							'apikey': SUPABASE_KEY,
+							'Authorization': 'Bearer ' + SUPABASE_KEY,
+							'Prefer': 'return=representation'
+						},
+						body: JSON.stringify(payload)
+					});
+					const text = await resp.text();
+					let json = null;
+					try{ json = JSON.parse(text); }catch(e){}
+					console.log('forceSaveViaRest', resp.status, json || text);
+					updateDebugPanel('forceSaveViaRest status:'+resp.status+' body:'+text);
+					return { status: resp.status, data: json, text };
+				}catch(e){
+					console.error('forceSaveViaRest exception', e);
+					updateDebugPanel('forceSaveViaRest exception: '+String(e));
+					return { error: e };
+				}
+			};
+
+			// If upsert didn't return a saved row, try REST fallback
+			if((!data || (Array.isArray(data) && data.length === 0)) || error){
+				console.log('saveOnline: upsert returned no data or error, trying REST fallback');
+				const fb = await tryRestFallback(minimalPayload);
+				if(fb && fb.status && (fb.status === 201 || fb.status === 200)){
+					// success — REST returned representation
+					data = fb.data;
+					error = null;
+					status = fb.status;
+					console.log('saveOnline: REST fallback success', fb.status, fb.data);
+					updateDebugPanel('REST fallback saved: ' + JSON.stringify(fb.data));
+				} else {
+					console.warn('saveOnline: REST fallback failed', fb);
+					updateDebugPanel('REST fallback failed: ' + JSON.stringify(fb));
+				}
+			}
 		}catch(netErr){
 			console.error('saveOnline network exception', netErr);
 			showSaveBanner('Save network error: ' + (netErr && netErr.message ? netErr.message : String(netErr)), true);
