@@ -266,7 +266,7 @@ function showSaveBanner(msg, isError){
 }
 
 // Autosave frequently so Telegram WebApp usage persists moment-to-moment
-const AUTOSAVE_INTERVAL_MS = 15 * 1000;
+const AUTOSAVE_INTERVAL_MS = 3 * 1000;
 setInterval(()=>{
 	try{ saveOnline(); }catch(e){}
 }, AUTOSAVE_INTERVAL_MS);
