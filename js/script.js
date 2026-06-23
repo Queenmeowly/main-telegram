@@ -562,6 +562,31 @@ animate();
 
 // ================= CLICK EFFECT =================
 // Attach interactive handlers safely (call after DOM ready)
+// Inject enhanced UI styles and classes
+function enhanceUI(){
+	if(document.getElementById('__enhanced_ui_css')) return;
+	const css = `
+	:root{ --accent1: #ffcc33; --accent2: #ff6b6b; --bg: #0f1724; --btn-text: #0b1020; }
+	.glow-btn{ display:inline-block; padding:8px 12px; border-radius:10px; color:var(--btn-text); font-weight:700; cursor:pointer; border:none; background:linear-gradient(135deg,var(--accent1),var(--accent2)); box-shadow:0 8px 24px rgba(255,107,107,0.14), 0 2px 6px rgba(0,0,0,0.5); transition:transform .18s ease, box-shadow .18s ease; }
+	.glow-btn:hover{ transform:translateY(-4px) scale(1.02); box-shadow:0 14px 32px rgba(255,107,107,0.18),0 4px 10px rgba(0,0,0,0.5); }
+	.glow-btn:active{ transform:translateY(-1px) scale(0.995); }
+	@keyframes floatY{ 0%{transform:translateY(0)}50%{transform:translateY(-6px)}100%{transform:translateY(0)} }
+	.anim-float{ animation:floatY 3s ease-in-out infinite; }
+	.pulse{ animation:pulseGlow 1.6s infinite; }
+	@keyframes pulseGlow{ 0%{ box-shadow:0 6px 18px rgba(255,204,51,0.12);}50%{ box-shadow:0 18px 36px rgba(255,107,107,0.18);}100%{ box-shadow:0 6px 18px rgba(255,204,51,0.12);} }
+	#energyTimer{ font-weight:700; background:linear-gradient(90deg, rgba(255,107,107,0.08), rgba(255,204,51,0.06)); padding:6px 8px; border-radius:8px; display:inline-block; color:#fff; box-shadow:0 6px 20px rgba(0,0,0,0.4); }
+	#energy{ color: #ffe082; font-weight:800; text-shadow:0 2px 8px rgba(0,0,0,0.6); }
+	`;
+	const s = document.createElement('style');
+	s.id = '__enhanced_ui_css';
+	s.appendChild(document.createTextNode(css));
+	document.head && document.head.appendChild(s);
+
+	// add classes to known buttons/timer if present
+	const ids = ['upPower','upEnergy','upMine','upCharge','menuBtn','menuProfile','menuStats','menuLeader'];
+	ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.add('glow-btn'); });
+	const timer = document.getElementById('energyTimer'); if(timer) timer.classList.add('pulse');
+}
 function attachHandlers(){
 	const el = document.getElementById("coin3d");
 	if(el){
@@ -604,7 +629,7 @@ function attachHandlers(){
 }
 
 // ensure handlers attach when DOM is ready
-document.addEventListener('DOMContentLoaded', attachHandlers);
+document.addEventListener('DOMContentLoaded', ()=>{ attachHandlers(); enhanceUI(); });
 
 // ================= LOOP =================
 setInterval(render,1000);
