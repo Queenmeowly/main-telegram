@@ -184,12 +184,19 @@ async function saveOnline(){
 	_saveInProgress = true;
 	try{
 		const minimalPayload = {
-			telegram_id: USER,
-			coins: Number(coins),
-			energy: Number(energy),
-			power: Number(powerLv),
-			max_energy: Number(maxEnergy)
-		};
+    telegram_id: USER,
+
+    coins: Number(coins),
+    energy: Number(energy),
+
+    power: Number(powerLv),
+    max_energy: Number(maxEnergy),
+
+    first_name: USER_NAME,
+    username: USER_USERNAME,
+
+    season: "1"
+};
 
 		// include local lastModified so server can decide which version is newest
 		minimalPayload.last_modified = new Date(Number(lastModified)).toISOString();
@@ -914,9 +921,6 @@ if (!data) {
 		energy = data.energy ?? 100;
 
 		powerLv = data.power ?? 1;
-		energyLv = data.energy_lv ?? 1;
-		mineLv = data.mine_lv ?? 1;
-		chargeLv = data.charge_lv ?? 1;
 
 		maxEnergy = data.max_energy ?? 100;
 		// restore server timer if present
