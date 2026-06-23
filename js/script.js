@@ -22,10 +22,18 @@ let particles = [];
 
 let power = powerLv;
 
+// last modified timestamp (ms) used to resolve conflicts and avoid rollback on refresh
+let lastModified = Number(localStorage.getItem('lastModified')) || Date.now();
+
 // save control flags
 let _saveInProgress = false;
 let _savePending = false;
 let _pendingLastGrant = null;
+
+function markModified(){
+	lastModified = Date.now();
+	try{ localStorage.setItem('lastModified', String(lastModified)); }catch(e){}
+}
 
 function parseTimerValue(v){
 	if(!v) return 0;
@@ -166,8 +174,14 @@ async function saveOnline(){
 			max_energy: Number(maxEnergy)
 		};
 
+		// include local lastModified so server can decide which version is newest
+		minimalPayload.last_modified = new Date(Number(lastModified)).toISOString();
+
 		// include last_grant only when we specifically set one (from offline grant computation)
 		if(_pendingLastGrant){ minimalPayload.last_grant = _pendingLastGrant; }
+
+		// include lastModified in local storage
+		localStorage.setItem('lastModified', String(lastModified));
 
 		// persist the next scheduled grant time so timer continues across devices/refreshes
 		if(energyTimerEnd && energy < maxEnergy){
@@ -293,8 +307,8 @@ function showSaveBanner(msg, isError){
 }
 
 // Autosave frequently so Telegram WebApp usage persists moment-to-moment
-// reduced interval to make autosave faster while using a debounced trigger for UI actions
-const AUTOSAVE_INTERVAL_MS = 1 * 1000; // 1s
+// set to 3s per request
+const AUTOSAVE_INTERVAL_MS = 3 * 1000; // 3s
 setInterval(()=>{
 	try{ saveOnline(); }catch(e){ console.warn('autosave failed', e); }
 }, AUTOSAVE_INTERVAL_MS);
@@ -369,6 +383,9 @@ function recalcDerived(){
 	maxEnergy = 100 + (chargeLv - 1);
 	// amount of energy granted each interval equals energy level
 	energyGain = energyLv;
+	// update lastModified when derived values change
+	lastModified = Date.now();
+	localStorage.setItem('lastModified', String(lastModified));
 }
 
 function tryUpgrade(kind){
@@ -399,6 +416,10 @@ function tryUpgrade(kind){
 	localStorage.setItem('mineLv', String(mineLv));
 	localStorage.setItem('chargeLv', String(chargeLv));
 	localStorage.setItem('maxEnergy', String(maxEnergy));
+    
+	// mark last modified on user action
+	lastModified = Date.now();
+	localStorage.setItem('lastModified', String(lastModified));
 
 	render();
 	updateUpgradeUI();
@@ -750,6 +771,9 @@ function attachHandlers(){
 				coins += power;
 				energy--;
 
+				// mark changed
+				markModified();
+
 				if(energy < maxEnergy && !energyTimerEnd){
 					energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
 					localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
@@ -770,6 +794,7 @@ function attachHandlers(){
 				localStorage.setItem('coins', String(coins));
 				localStorage.setItem('energy', String(energy));
 				localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+				markModified();
 
 				// trigger save asynchronously (debounced) to avoid blocking the click handler
 				triggerSave(500);
