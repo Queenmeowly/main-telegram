@@ -7,6 +7,40 @@ SUPABASE_URL,
 SUPABASE_KEY
 );
 
+// global state defaults (persisted values are loaded from localStorage)
+let coins = Number(localStorage.getItem('coins')) || 0;
+let energy = Number(localStorage.getItem('energy')) || 100;
+let powerLv = Number(localStorage.getItem('powerLv')) || 1;
+let energyLv = Number(localStorage.getItem('energyLv')) || 1;
+let mineLv = Number(localStorage.getItem('mineLv')) || 1;
+let chargeLv = Number(localStorage.getItem('chargeLv')) || 1;
+let maxEnergy = Number(localStorage.getItem('maxEnergy')) || 100;
+let energyGain = energyLv;
+let energyTimerEnd = Number(localStorage.getItem('energyTimerEnd')) || 0;
+const ENERGY_INTERVAL = Number(localStorage.getItem('ENERGY_INTERVAL')) || 60; // seconds
+let particles = [];
+
+let power = powerLv;
+
+// save control flags
+let _saveInProgress = false;
+let _savePending = false;
+let _pendingLastGrant = null;
+
+function parseTimerValue(v){
+	if(!v) return 0;
+	const n = Number(v);
+	if(!isNaN(n) && n > 0) return n;
+	const p = Date.parse(v);
+	return isNaN(p) ? 0 : p;
+}
+
+function updateDebugPanel(msg){
+	const el = document.getElementById('debugPanel');
+	if(el) el.innerText = msg;
+	else console.log(msg);
+}
+
 // ================= TELEGRAM LOGIN =================
 
 console.log("INIT DATA:", window.Telegram?.WebApp?.initDataUnsafe);
@@ -18,105 +52,114 @@ let USER_USERNAME = "";
 let USER_PHOTO = "";
 
 if (
-    window.Telegram &&
-    window.Telegram.WebApp &&
-    window.Telegram.WebApp.initDataUnsafe &&
-    window.Telegram.WebApp.initDataUnsafe.user
-) {
+	window.Telegram &&
+	window.Telegram.WebApp &&
+	window.Telegram.WebApp.initDataUnsafe &&
+	window.Telegram.WebApp.initDataUnsafe.user
+){
 
-    window.Telegram.WebApp.ready();
+	window.Telegram.WebApp.ready();
 
-    const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
+	const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
 
-    USER = String(tgUser.id);
-    USER_NAME = tgUser.first_name || "";
-    USER_USERNAME = tgUser.username || "";
-    USER_PHOTO = tgUser.photo_url || "";
+	USER = String(tgUser.id);
+	USER_NAME = tgUser.first_name || "";
+	USER_USERNAME = tgUser.username || "";
+	USER_PHOTO = tgUser.photo_url || "";
 
-    console.log("Telegram User:", USER, USER_NAME);
+	console.log("Telegram User:", USER, USER_NAME);
 
 } else {
 
-    console.warn("Telegram WebApp not detected, fallback user");
+	console.warn("Telegram WebApp not detected, fallback user");
 
-    let stored = localStorage.getItem("user_id");
+	let stored = localStorage.getItem("user_id");
 
-    if (!stored) {
-        stored = String(Date.now());
-        localStorage.setItem("user_id", stored);
-    }
-
-    USER = String(stored);
-    USER_NAME = "Test User";
-    USER_USERNAME = "test";
-    USER_PHOTO = "";
-}
-
-// فقط این try باید بیرون باشه (درست و ساده)
-document.addEventListener("DOMContentLoaded", () => {
-    try {
-        updateDebugPanel("USER SET: " + USER + " | NAME: " + USER_NAME + " | USERNAME: " + USER_USERNAME);
-    } catch (e) {}
-});
-document.addEventListener("DOMContentLoaded", () => {
-  updateDebugPanel("USER SET: " + USER);
-});
-// Force-disable debug panel (prevent save/status UI from appearing)
-const DEBUG_PANEL_ENABLED = false;
-let coins = Number(localStorage.getItem('coins')) || 0;
-let energy = Number(localStorage.getItem('energy')) || 100;
-
-let powerLv = Number(localStorage.getItem('powerLv')) || 1;
-let energyLv = Number(localStorage.getItem('energyLv')) || 1;
-let mineLv = Number(localStorage.getItem('mineLv')) || 1;
-let chargeLv = Number(localStorage.getItem('chargeLv')) || 1;
-
-let maxEnergy = Number(localStorage.getItem('maxEnergy')) || 100;
-
-let energyTimerEnd = Number(localStorage.getItem('energyTimerEnd')) || 0;
-const ENERGY_INTERVAL = 30 * 60; // seconds (default 30 minutes)
-
-let energyGain = energyLv;
-const particles = [];
-
-// save control
-let _saveInProgress = false;
-let _savePending = false;
-// when we apply offline grants, store the timestamp of the last grant to persist to server
-let _pendingLastGrant = null;
-
-// Debug/status panel for environments without a console (Telegram WebView)
-function ensureDebugPanel(){
-	// intentionally no-op to prevent creation of the save/status UI
-	return;
-}
-
-function updateDebugPanel(msg){
-	// intentionally no-op so no debug messages are shown in UI
-	return;
-}
-
-// ================= SAVE =================
-async function saveOnline(){
-	// simple single-writer lock to avoid race conditions when saveOnline is called rapidly
-	if(_saveInProgress){
-		_savePending = true;
-		return;
+	if(!stored){
+		stored = String(Date.now());
+		localStorage.setItem("user_id", stored);
 	}
 
+	function updateEnergyTimer(){
+		ensureEnergyTimerElement();
+		const el = document.getElementById("energyTimer");
+
+		const now = Date.now();
+
+		if(energy >= maxEnergy){
+			el.innerText = "";
+			energyTimerEnd = 0;
+			localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
+			return;
+		}
+
+		// if energy is below max and there's no active timer, restore from storage or start a new one
+		if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
+			const storedRaw = localStorage.getItem('energyTimerEnd');
+			const stored = parseTimerValue(storedRaw) || 0;
+			console.log('energyTimer restore: localRaw=', storedRaw, 'parsed=', stored, 'now=', now);
+			if(stored && stored > now){
+				energyTimerEnd = stored;
+			} else {
+				energyTimerEnd = now + ENERGY_INTERVAL * 1000;
+				localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
+				// persist this scheduled timer to server so refreshes/devices keep the same countdown
+				try{ saveOnline(); }catch(e){}
+			}
+		}
+
+		// only grant when a timer is active and it has reached 0
+		if(energyTimerEnd && energyTimerEnd <= now){
+			const intervalMs = ENERGY_INTERVAL * 1000;
+			// how many intervals have passed since the scheduled next grant
+			const passedMs = now - energyTimerEnd;
+			const intervalsPassed = 1 + Math.floor(passedMs / intervalMs);
+			const gainPer = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
+			const totalGain = intervalsPassed * gainPer;
+
+			const prevEnergy = energy;
+			energy = Math.min(maxEnergy, energy + totalGain);
+
+			if(energy < maxEnergy){
+				// schedule next grant after the intervals that already passed
+				energyTimerEnd = energyTimerEnd + intervalsPassed * intervalMs;
+				localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
+				// persist updated timer to server
+				try{ saveOnline(); }catch(e){}
+			} else {
+				// reached max — clear timer
+				energyTimerEnd = 0;
+				localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
+				// persist clear timer to server
+				try{ saveOnline(); }catch(e){}
+			}
+
+			// if energy changed, persist locally and try to save online
+			if(energy !== prevEnergy){
+				localStorage.setItem('energy', String(energy));
+				try{ saveOnline(); }catch(e){}
+			}
+
+			render();
+		}
+
+		if(energyTimerEnd){
+			const remaining = Math.ceil((energyTimerEnd - now) / 1000);
+			const gain = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
+			el.innerText = `${formatDuration(remaining)} | + ${gain} energy`;
+		} else {
+			el.innerText = "";
+		}
+
+	}
+
+// Save current state to server (wrapped and fixed)
+async function saveOnline(){
+	if(_saveInProgress){ _savePending = true; return; }
 	_saveInProgress = true;
 	try{
-		updateDebugPanel('saveOnline() - USER: ' + String(USER));
-		console.log("SAVE DATA:", {
-telegram_id: USER,			coins,
-			energy,
-			power: powerLv,
-			max_energy: maxEnergy
-		});
-		updateDebugPanel('SAVE DATA: coins=' + String(coins) + ' energy=' + String(energy) + ' power=' + String(powerLv));
-
 		const minimalPayload = {
-telegram_id: USER,
+			telegram_id: USER,
 			coins: Number(coins),
 			energy: Number(energy),
 			power: Number(powerLv),
@@ -124,15 +167,11 @@ telegram_id: USER,
 		};
 
 		// include last_grant only when we specifically set one (from offline grant computation)
-		if(_pendingLastGrant){
-			minimalPayload.last_grant = _pendingLastGrant;
-		}
+		if(_pendingLastGrant){ minimalPayload.last_grant = _pendingLastGrant; }
 
 		// persist the next scheduled grant time so timer continues across devices/refreshes
 		if(energyTimerEnd && energy < maxEnergy){
-			try{
-				minimalPayload.energy_timer_end = new Date(Number(energyTimerEnd)).toISOString();
-			}catch(e){ /* ignore */ }
+			try{ minimalPayload.energy_timer_end = new Date(Number(energyTimerEnd)).toISOString(); }catch(e){}
 		}
 
 		// use array form and request representation so we get the saved row back
@@ -159,9 +198,7 @@ telegram_id: USER,
 					try{
 						const resp2 = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
 						data = resp2.data; error = resp2.error; status = resp2.status;
-					}catch(e2){
-						console.error('retry upsert after removing missing column failed', e2);
-					}
+					}catch(e2){ console.error('retry upsert after removing missing column failed', e2); }
 				}
 			}catch(ignore){}
 
@@ -188,9 +225,7 @@ telegram_id: USER,
 						_pendingLastGrant = null;
 					}
 				}
-			}catch(ex){
-				console.error('update fallback unexpected error', ex);
-			}
+			}catch(ex){ console.error('update fallback unexpected error', ex); }
 		} else {
 			console.log('saved (upsert):', USER, coins, data);
 			updateDebugPanel('saved (upsert) — telegram_id: ' + String(USER) + '\n' + JSON.stringify(data));
@@ -206,10 +241,9 @@ telegram_id: USER,
 				localStorage.setItem('energy', String(energy));
 				localStorage.setItem('powerLv', String(powerLv));
 				localStorage.setItem('maxEnergy', String(maxEnergy));
-					// successful save — clear pending last_grant
-					_pendingLastGrant = null;
-					// show a subtle success banner (non-intrusive)
-					try{ showSaveBanner('Saved', false); }catch(e){}
+				// successful save — clear pending last_grant
+				_pendingLastGrant = null;
+				try{ showSaveBanner('Saved', false); }catch(e){}
 			}
 		}
 
@@ -217,23 +251,17 @@ telegram_id: USER,
 		try{
 			const { data: verifyRow, error: verifyErr } = await db.from('users').select('*').eq('telegram_id', USER).maybeSingle();
 			updateDebugPanel('verify select after saveOnline: ' + JSON.stringify(verifyRow) + ' err:' + String(verifyErr));
-		}catch(vE){
-			console.warn('verify select failed', vE);
-		}
+		}catch(vE){ console.warn('verify select failed', vE); }
 
 	}catch(err){
 		console.error('saveOnline unexpected error', err);
-		// show visible banner inside the app so Telegram WebView users see save failures
 		try{ showSaveBanner('Save failed: ' + (err && err.message ? err.message : String(err)), true); }catch(e){}
 	}finally{
 		_saveInProgress = false;
-		// if there was a pending save requested while we were saving, do one more
-		if(_savePending){
-			_savePending = false;
-			// schedule next tick so we don't recurse deeply
-			setTimeout(()=>saveOnline(), 50);
-		}
+		if(_savePending){ _savePending = false; setTimeout(()=>saveOnline(), 50); }
 	}
+}
+
 }
 
 // small visible banner for displaying save errors/successes inside the WebApp
