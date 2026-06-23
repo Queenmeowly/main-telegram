@@ -44,6 +44,35 @@ function markModified(){
 	try{ localStorage.setItem('lastModified', String(lastModified)); }catch(e){}
 }
 
+// helper that writes to localStorage using the original setter if it was preserved
+function setLocalItem(k, v){
+	try{
+		if(localStorage && localStorage._original_setItem){
+			localStorage._original_setItem.call(localStorage, k, v);
+		} else {
+			localStorage.setItem(k, v);
+		}
+	}catch(e){}
+}
+
+function setLocalSnapshot(obj){
+	try{
+		const snap = Object.assign({ ts: Date.now() }, obj || {});
+		setLocalItem('local_snapshot', JSON.stringify(snap));
+	}catch(e){}
+}
+
+function getLocalSnapshot(){
+	try{
+		const s = localStorage.getItem('local_snapshot');
+		if(!s) return null;
+		return JSON.parse(s);
+	}catch(e){ return null; }
+}
+
+// prevent recursive load <-> save loops when applying a local snapshot
+let _applyingLocalSnapshot = false;
+
 function parseTimerValue(v){
 	if(!v) return 0;
 	const n = Number(v);
@@ -184,20 +213,22 @@ async function saveOnline(){
 	_saveInProgress = true;
 	try{
 const minimalPayload = {
-    telegram_id: USER,
+  telegram_id: USER,
 
-    coins: Number(coins),
-    energy: Number(energy),
+  coins: Number(coins),
+  energy: Number(energy),
 
-    power: Number(powerLv),
-    energy_lv: Number(energyLv),
-    mine_lv: Number(mineLv),
-    charge_lv: Number(chargeLv),
+  power: Number(powerLv),
+  max_energy: Number(maxEnergy),
 
-    max_energy: Number(maxEnergy),
+  energy_lv: Number(energyLv),
+  mine_lv: Number(mineLv),
+  charge_lv: Number(chargeLv),
 
-    first_name: USER_NAME,
-    username: USER_USERNAME
+  first_name: USER_NAME,
+  username: USER_USERNAME,
+
+  season: "1"
 };
 
 		// include local lastModified so server can decide which version is newest
@@ -309,10 +340,13 @@ const minimalPayload = {
 				energy = row.energy ?? energy;
 				powerLv = row.power ?? powerLv;
 				maxEnergy = row.max_energy ?? maxEnergy;
-				localStorage.setItem('coins', String(coins));
-				localStorage.setItem('energy', String(energy));
-				localStorage.setItem('powerLv', String(powerLv));
-				localStorage.setItem('maxEnergy', String(maxEnergy));
+				// persist snapshot using original setter so it's available across reloads
+				setLocalItem('coins', String(coins));
+				setLocalItem('energy', String(energy));
+				setLocalItem('powerLv', String(powerLv));
+				setLocalItem('maxEnergy', String(maxEnergy));
+				// also store a short-lived local snapshot for reconciling races
+				try{ setLocalSnapshot({ coins, energy, powerLv, maxEnergy, lastModified: row.last_modified || new Date().toISOString() }); }catch(e){}
 				// successful save — clear pending last_grant
 				_pendingLastGrant = null;
 				try{ showSaveBanner('Saved to DB', false); }catch(e){}
@@ -468,16 +502,19 @@ function tryUpgrade(kind){
 
 	recalcDerived();
 
-	localStorage.setItem('coins', String(coins));
-	localStorage.setItem('powerLv', String(powerLv));
-	localStorage.setItem('energyLv', String(energyLv));
-	localStorage.setItem('mineLv', String(mineLv));
-	localStorage.setItem('chargeLv', String(chargeLv));
-	localStorage.setItem('maxEnergy', String(maxEnergy));
+	// persist upgrade changes using preserved setter
+	setLocalItem('coins', String(coins));
+	setLocalItem('powerLv', String(powerLv));
+	setLocalItem('energyLv', String(energyLv));
+	setLocalItem('mineLv', String(mineLv));
+	setLocalItem('chargeLv', String(chargeLv));
+	setLocalItem('maxEnergy', String(maxEnergy));
+
+	try{ setLocalSnapshot({ coins, energy, powerLv, energyLv, mineLv, chargeLv, maxEnergy, lastModified: new Date(lastModified).toISOString() }); }catch(e){}
     
 	// mark last modified on user action
 	lastModified = Date.now();
-	localStorage.setItem('lastModified', String(lastModified));
+	setLocalItem('lastModified', String(lastModified));
 
 	render();
 	updateUpgradeUI();
@@ -875,11 +912,13 @@ function attachHandlers(){
 
 				render();
 
-				// persist locally immediately so refresh has latest while we sync to server
-				localStorage.setItem('coins', String(coins));
-				localStorage.setItem('energy', String(energy));
-				localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+				// persist locally immediately (use original setter) so refresh has latest while we sync to server
+				setLocalItem('coins', String(coins));
+				setLocalItem('energy', String(energy));
+				setLocalItem('energyTimerEnd', String(energyTimerEnd));
 				markModified();
+				// store a short-lived snapshot to prefer over server row if it's very recent
+				try{ setLocalSnapshot({ coins, energy, powerLv, maxEnergy, lastModified: new Date(lastModified).toISOString() }); }catch(e){}
 
 				// trigger save asynchronously (debounced) to avoid blocking the click handler
 				triggerSave(500);
@@ -918,9 +957,45 @@ if (!data) {
   return;
 }
 
-		// Accept server data as authoritative (online-first mode)
-		coins = data.coins ?? 0;
-		energy = data.energy ?? 100;
+		// Reconcile server data with any recent local snapshot to avoid losing recent local actions
+		try{
+			const localSnap = getLocalSnapshot();
+			if(localSnap && localSnap.ts && (Date.now() - localSnap.ts) < 10 * 1000){
+				// if snapshot is newer than server last_modified, apply snapshot locally and push to server
+				const serverTs = data && data.last_modified ? Date.parse(data.last_modified) : 0;
+				if(localSnap.lastModified && Date.parse(localSnap.lastModified) > serverTs){
+					console.log('loadOnline: applying recent local snapshot (newer than server)');
+					_applyingLocalSnapshot = true;
+					try{
+						coins = Number(localSnap.coins) || coins;
+						energy = Number(localSnap.energy) || energy;
+						powerLv = Number(localSnap.powerLv) || powerLv;
+						maxEnergy = Number(localSnap.maxEnergy) || maxEnergy;
+						// push snapshot to server to reconcile
+						try{ await saveOnline(); }catch(e){ updateDebugPanel('save after applying snapshot failed: '+String(e)); }
+					}catch(e){ console.warn('apply local snapshot failed', e); }
+					_applyingLocalSnapshot = false;
+				} else {
+					// snapshot exists but server is newer — accept server
+					coins = data.coins ?? 0;
+					energy = data.energy ?? 100;
+					powerLv = data.power ?? 1;
+					maxEnergy = data.max_energy ?? 100;
+				}
+			} else {
+				// no recent snapshot — accept server as authoritative
+				coins = data.coins ?? 0;
+				energy = data.energy ?? 100;
+				powerLv = data.power ?? 1;
+				maxEnergy = data.max_energy ?? 100;
+			}
+		}catch(e){
+			console.warn('reconcile snapshot error', e);
+			coins = data.coins ?? 0;
+			energy = data.energy ?? 100;
+			powerLv = data.power ?? 1;
+			maxEnergy = data.max_energy ?? 100;
+		}
 
 		powerLv = data.power ?? 1;
 
