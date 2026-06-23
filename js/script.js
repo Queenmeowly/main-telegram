@@ -607,17 +607,26 @@ scene.add(coin);
 
 // ================= PARTICLES =================
 function spawnParticles(){
-for(let i=0;i<22;i++){
-particles.push({
-x:0,
-y:0,
-z:0,
-vx:(Math.random()-0.5)*2,
-vy:(Math.random())*2,
-vz:(Math.random()-0.5)*2,
-life:45
-});
-}
+	// spawn a small burst of particles; create a mesh per particle once and reuse until removed
+	const COUNT = 10; // fewer particles to reduce load
+	for(let i=0;i<COUNT;i++){
+		const mesh = new THREE.Mesh(
+			new THREE.SphereGeometry(0.06,6,6),
+			new THREE.MeshBasicMaterial({color:0xffd36b})
+		);
+		mesh.position.set(0,0,0);
+		scene.add(mesh);
+		particles.push({
+			x:0,
+			y:0,
+			z:0,
+			vx:(Math.random()-0.5)*2,
+			vy:(Math.random())*2,
+			vz:(Math.random()-0.5)*2,
+			life:12, // shorter life
+			mesh
+		});
+	}
 }
 
 // ================= ANIMATION =================
@@ -627,29 +636,33 @@ requestAnimationFrame(animate);
 coin.rotation.z += 0.005;
 coin.position.y = Math.sin(Date.now()*0.002)*0.04;
 
-// particles update
-for(let i=particles.length-1;i>=0;i--){
-const p=particles[i];
+		// particles update
+		for(let i=particles.length-1;i>=0;i--){
+			const p = particles[i];
 
-p.x += p.vx;
-p.y += p.vy;
-p.z += p.vz;
+			p.x += p.vx;
+			p.y += p.vy;
+			p.z += p.vz;
 
-p.vy -= 0.03;
-p.life--;
+			p.vy -= 0.03;
+			p.life--;
 
-const dot = new THREE.Mesh(
-new THREE.SphereGeometry(0.06,6,6),
-new THREE.MeshBasicMaterial({color:0xffd36b})
-);
+			// update existing mesh position
+			if(p.mesh){
+				p.mesh.position.set(p.x, p.y, p.z);
+			}
 
-dot.position.set(p.x,p.y,p.z);
-scene.add(dot);
-
-setTimeout(()=>scene.remove(dot),110);
-
-if(p.life<=0) particles.splice(i,1);
-}
+			if(p.life<=0){
+				try{
+					if(p.mesh){
+						scene.remove(p.mesh);
+						if(p.mesh.geometry) p.mesh.geometry.dispose();
+						if(p.mesh.material) p.mesh.material.dispose();
+					}
+				}catch(e){}
+				particles.splice(i,1);
+			}
+		}
 
 renderer.render(scene,camera);
 }
