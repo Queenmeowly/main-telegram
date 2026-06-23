@@ -264,7 +264,6 @@ async function saveOnline(){
 
 }
 
-// small visible banner for displaying save errors/successes inside the WebApp
 function showSaveBanner(msg, isError){
 	try{
 		let b = document.getElementById('__save_banner');
@@ -294,10 +293,22 @@ function showSaveBanner(msg, isError){
 }
 
 // Autosave frequently so Telegram WebApp usage persists moment-to-moment
-const AUTOSAVE_INTERVAL_MS = 3 * 1000;
+// reduced interval to make autosave faster while using a debounced trigger for UI actions
+const AUTOSAVE_INTERVAL_MS = 1 * 1000; // 1s
 setInterval(()=>{
-	try{ saveOnline(); }catch(e){}
+	try{ saveOnline(); }catch(e){ console.warn('autosave failed', e); }
 }, AUTOSAVE_INTERVAL_MS);
+
+// Debounced save trigger for UI-driven events to avoid blocking the UI and spamming the server
+let __triggerSaveTimer = null;
+function triggerSave(delay = 700){
+	if(_saveInProgress){ _savePending = true; return; }
+	if(__triggerSaveTimer) clearTimeout(__triggerSaveTimer);
+	__triggerSaveTimer = setTimeout(()=>{
+		__triggerSaveTimer = null;
+		try{ saveOnline(); }catch(e){ console.warn('triggered save failed', e); }
+	}, delay);
+}
 // ================= UI =================
 function render(){
 document.getElementById("coinsValue").innerText = coins;
@@ -557,6 +568,8 @@ antialias:true
 });
 
 renderer.setSize(260,260);
+// limit pixel ratio to reduce GPU load on low-end devices (reduces lag in WebView)
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.6;
@@ -758,8 +771,8 @@ function attachHandlers(){
 				localStorage.setItem('energy', String(energy));
 				localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 
-				// save to server (await so order is preserved)
-				await saveOnline();
+				// trigger save asynchronously (debounced) to avoid blocking the click handler
+				triggerSave(500);
 			}catch(err){
 				console.error('coin click handler error', err);
 				updateDebugPanel('coin click handler error: ' + String(err));
