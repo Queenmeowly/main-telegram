@@ -61,8 +61,8 @@ document.addEventListener("DOMContentLoaded", () => {
 document.addEventListener("DOMContentLoaded", () => {
   updateDebugPanel("USER SET: " + USER);
 });
-// Disable on-screen debug panel inside Telegram WebApp (it covers the view). Enable for normal browser testing.
-const DEBUG_PANEL_ENABLED = !(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user);
+// Force-disable debug panel (prevent save/status UI from appearing)
+const DEBUG_PANEL_ENABLED = false;
 let coins = Number(localStorage.getItem('coins')) || 0;
 let energy = Number(localStorage.getItem('energy')) || 100;
 
@@ -82,38 +82,18 @@ const particles = [];
 // save control
 let _saveInProgress = false;
 let _savePending = false;
+// when we apply offline grants, store the timestamp of the last grant to persist to server
+let _pendingLastGrant = null;
 
 // Debug/status panel for environments without a console (Telegram WebView)
 function ensureDebugPanel(){
-    if(!DEBUG_PANEL_ENABLED) return;
-	if(document.getElementById('saveStatus')) return;
-	const d = document.createElement('div');
-	d.id = 'saveStatus';
-	d.style.position = 'fixed';
-	d.style.right = '12px';
-	d.style.bottom = '12px';
-	d.style.zIndex = 99999;
-	d.style.background = 'rgba(0,0,0,0.6)';
-	d.style.color = 'white';
-	d.style.fontSize = '12px';
-	d.style.padding = '8px 10px';
-	d.style.borderRadius = '8px';
-	d.style.maxWidth = '320px';
-	d.style.boxShadow = '0 6px 20px rgba(0,0,0,0.6)';
-	d.innerHTML = '<b>Save status</b><div id="saveStatusBody" style="margin-top:6px;white-space:pre-wrap;overflow:auto;max-height:180px;"></div>';
-	document.body.appendChild(d);
+	// intentionally no-op to prevent creation of the save/status UI
+	return;
 }
 
 function updateDebugPanel(msg){
-	if(!DEBUG_PANEL_ENABLED) return;
-	try{
-		ensureDebugPanel();
-		const el = document.getElementById('saveStatusBody');
-		const time = new Date().toLocaleTimeString();
-		el.innerText = `[${time}] ${msg}\n` + el.innerText;
-	}catch(e){
-		// ignore
-	}
+	// intentionally no-op so no debug messages are shown in UI
+	return;
 }
 
 // ================= SAVE =================
@@ -143,6 +123,18 @@ telegram_id: USER,
 			max_energy: Number(maxEnergy)
 		};
 
+		// include last_grant only when we specifically set one (from offline grant computation)
+		if(_pendingLastGrant){
+			minimalPayload.last_grant = _pendingLastGrant;
+		}
+
+		// persist the next scheduled grant time so timer continues across devices/refreshes
+		if(energyTimerEnd && energy < maxEnergy){
+			try{
+				minimalPayload.energy_timer_end = new Date(Number(energyTimerEnd)).toISOString();
+			}catch(e){ /* ignore */ }
+		}
+
 		// use array form and request representation so we get the saved row back
 		const { data, error, status } = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
 
@@ -164,6 +156,8 @@ telegram_id: USER,
 						energy = row.energy ?? energy;
 						localStorage.setItem('coins', String(coins));
 						localStorage.setItem('energy', String(energy));
+						// update succeeded — clear pending last_grant so we don't resend it
+						_pendingLastGrant = null;
 					}
 				}
 			}catch(ex){
@@ -184,6 +178,8 @@ telegram_id: USER,
 				localStorage.setItem('energy', String(energy));
 				localStorage.setItem('powerLv', String(powerLv));
 				localStorage.setItem('maxEnergy', String(maxEnergy));
+					// successful save — clear pending last_grant
+					_pendingLastGrant = null;
 			}
 		}
 
@@ -370,6 +366,8 @@ function updateEnergyTimer(){
 		} else {
 			energyTimerEnd = now + ENERGY_INTERVAL * 1000;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+			// persist this scheduled timer to server so refreshes/devices keep the same countdown
+			try{ saveOnline(); }catch(e){}
 		}
 	}
 
@@ -389,10 +387,14 @@ function updateEnergyTimer(){
 			// schedule next grant after the intervals that already passed
 			energyTimerEnd = energyTimerEnd + intervalsPassed * intervalMs;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+			// persist updated timer to server
+			try{ saveOnline(); }catch(e){}
 		} else {
 			// reached max — clear timer
 			energyTimerEnd = 0;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+			// persist clear timer to server
+			try{ saveOnline(); }catch(e){}
 		}
 
 		// if energy changed, persist locally and try to save online
@@ -645,34 +647,44 @@ if (!data) {
 			const stored = Number(localStorage.getItem('energyTimerEnd')) || 0;
 			if(stored && stored > now){
 				energyTimerEnd = stored;
-			} else if(data.last_grant){
-				// 2) If server provided last_grant, compute next timer based on that
-				const last = Date.parse(data.last_grant);
-				if(!isNaN(last)){
-					const intervalMs = ENERGY_INTERVAL * 1000;
-					const passedMs = Math.max(0, now - last);
-					const intervalsPassed = Math.floor(passedMs / intervalMs);
-					// next scheduled grant time after last_grant
-					energyTimerEnd = last + (intervalsPassed + 1) * intervalMs;
-					// if the computed time is already passed, clamp by adding one interval
-					if(energyTimerEnd <= now) energyTimerEnd = now + intervalMs;
-					localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-					// Also apply missed grants immediately (keep offline accumulation)
-					const gainPer = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
-					const totalIntervals = intervalsPassed;
-					if(totalIntervals > 0){
-						const totalGain = totalIntervals * gainPer;
-						const before = energy;
-						energy = Math.min(maxEnergy, energy + totalGain);
-						localStorage.setItem('energy', String(energy));
-						updateDebugPanel('Applied offline gain from last_grant: +' + totalGain + ' energy');
-						try{ await saveOnline(); }catch(e){ updateDebugPanel('save after offline apply failed: ' + String(e)); }
-					}
+			} else {
+				// 1b) Prefer server-saved explicit timer if present
+				let serverTimer = 0;
+				if(data && data.energy_timer_end){
+					const parsed = Date.parse(data.energy_timer_end);
+					if(!isNaN(parsed)) serverTimer = parsed;
+					else serverTimer = Number(data.energy_timer_end) || 0;
 				}
-			} else if(energy < maxEnergy){
-				// 3) fallback: if nothing stored and no server info, start a timer now
-				energyTimerEnd = now + ENERGY_INTERVAL * 1000;
-				localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+				if(serverTimer && serverTimer > now){
+					energyTimerEnd = serverTimer;
+					localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+				} else if(data && data.last_grant){
+					// 2) If server provided last_grant, compute next timer based on that
+					const last = Date.parse(data.last_grant);
+					if(!isNaN(last)){
+						const intervalMs = ENERGY_INTERVAL * 1000;
+						const passedMs = Math.max(0, now - last);
+						const intervalsPassed = Math.floor(passedMs / intervalMs);
+						// apply missed grants immediately
+						if(intervalsPassed > 0){
+							const gainPer = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
+							const totalGain = intervalsPassed * gainPer;
+							energy = Math.min(maxEnergy, energy + totalGain);
+							localStorage.setItem('energy', String(energy));
+							updateDebugPanel('Applied offline gain from last_grant: +' + totalGain + ' energy');
+							try{ await saveOnline(); }catch(e){ updateDebugPanel('save after offline apply failed: ' + String(e)); }
+						}
+						// next scheduled grant time after last_grant
+						energyTimerEnd = last + (intervalsPassed + 1) * intervalMs;
+						if(energyTimerEnd <= now) energyTimerEnd = now + intervalMs;
+						localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+					}
+				} else if(energy < maxEnergy){
+					// 3) fallback: if nothing stored and no server info, start a timer now
+					energyTimerEnd = now + ENERGY_INTERVAL * 1000;
+					localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
+					try{ saveOnline(); }catch(e){}
+				}
 			}
 		}catch(ex){ console.warn('energyTimer restore failed', ex); }
 
