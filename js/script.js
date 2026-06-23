@@ -8,15 +8,16 @@ SUPABASE_KEY
 );
 
 // global state defaults (persisted values are loaded from localStorage)
-let coins = Number(localStorage.getItem('coins')) || 0;
-let energy = Number(localStorage.getItem('energy')) || 100;
-let powerLv = Number(localStorage.getItem('powerLv')) || 1;
-let energyLv = Number(localStorage.getItem('energyLv')) || 1;
-let mineLv = Number(localStorage.getItem('mineLv')) || 1;
-let chargeLv = Number(localStorage.getItem('chargeLv')) || 1;
-let maxEnergy = Number(localStorage.getItem('maxEnergy')) || 100;
+// start with defaults; prefer authoritative values from the server (DB)
+let coins = 0;
+let energy = 100;
+let powerLv = 1;
+let energyLv = 1;
+let mineLv = 1;
+let chargeLv = 1;
+let maxEnergy = 100;
 let energyGain = energyLv;
-let energyTimerEnd = Number(localStorage.getItem('energyTimerEnd')) || 0;
+let energyTimerEnd = 0;
 const ENERGY_INTERVAL = Number(localStorage.getItem('ENERGY_INTERVAL')) || 60; // seconds
 let particles = [];
 
@@ -29,6 +30,14 @@ let lastModified = Number(localStorage.getItem('lastModified')) || Date.now();
 let _saveInProgress = false;
 let _savePending = false;
 let _pendingLastGrant = null;
+
+// disable localStorage writes so all authoritative state comes from the DB
+try{
+	if(window.localStorage){
+		localStorage._original_setItem = localStorage.setItem;
+		localStorage.setItem = function(){ /* disabled to force online-only state */ };
+	}
+}catch(e){ /* ignore */ }
 
 function markModified(){
 	lastModified = Date.now();
@@ -869,26 +878,25 @@ if (!data) {
   return;
 }
 
-		// resolve server vs local using last_modified timestamps
-		const serverModified = data && data.last_modified ? Date.parse(data.last_modified) : 0;
-		// if server has newer data, accept it; if local is newer, push local to server
-		if(serverModified && serverModified > lastModified){
-			coins = data.coins ?? coins;
-			energy = data.energy ?? energy;
+		// Accept server data as authoritative (online-first mode)
+		coins = data.coins ?? 0;
+		energy = data.energy ?? 100;
 
-			powerLv = data.power ?? powerLv;
-			energyLv = data.energy_lv ?? energyLv;
-			mineLv = data.mine_lv ?? mineLv;
-			chargeLv = data.charge_lv ?? chargeLv;
+		powerLv = data.power ?? 1;
+		energyLv = data.energy_lv ?? 1;
+		mineLv = data.mine_lv ?? 1;
+		chargeLv = data.charge_lv ?? 1;
 
-			maxEnergy = data.max_energy ?? maxEnergy;
-			// update local lastModified to server's
-			lastModified = serverModified;
-			localStorage.setItem('lastModified', String(lastModified));
-		} else {
-			// local state is newer (or server has no timestamp) -> push local to server
-			try{ await saveOnline(); }catch(e){ console.warn('initial push after load failed', e); }
+		maxEnergy = data.max_energy ?? 100;
+		// restore server timer if present
+		if(data && data.energy_timer_end){
+			const parsed = Date.parse(data.energy_timer_end);
+			if(!isNaN(parsed)) energyTimerEnd = parsed;
 		}
+		// set lastModified from server if available
+		const serverModified = data && data.last_modified ? Date.parse(data.last_modified) : Date.now();
+		lastModified = serverModified || Date.now();
+		try{ localStorage.setItem('lastModified', String(lastModified)); }catch(e){}
 		// restore or compute a proper energyTimerEnd so countdown continues across refreshes and while offline
 		try{
 			const now = Date.now();
