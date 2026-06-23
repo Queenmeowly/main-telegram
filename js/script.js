@@ -31,13 +31,6 @@ let _saveInProgress = false;
 let _savePending = false;
 let _pendingLastGrant = null;
 
-// disable localStorage writes so all authoritative state comes from the DB
-try{
-	if(window.localStorage){
-		localStorage._original_setItem = localStorage.setItem;
-		localStorage.setItem = function(){ /* disabled to force online-only state */ };
-	}
-}catch(e){ /* ignore */ }
 
 function markModified(){
 	lastModified = Date.now();
@@ -256,7 +249,13 @@ const minimalPayload = {
 		let data, error, status;
 		try{
 			console.log('saveOnline: saving payload', minimalPayload, 'USER=', USER);
-			const resp = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
+			const resp = await db
+.from('users')
+.upsert([minimalPayload], {
+onConflict:'telegram_id'
+})
+.select()
+.single();
 			console.log('saveOnline: upsert response', resp);
 			data = resp.data; error = resp.error; status = resp.status;
 
@@ -531,7 +530,7 @@ function recalcDerived(){
 	localStorage.setItem('lastModified', String(lastModified));
 }
 
-function tryUpgrade(kind){
+async function tryUpgrade(kind){
 	let lvlVar = 1;
 
 	if(kind==='power') lvlVar = powerLv;
@@ -567,11 +566,12 @@ function tryUpgrade(kind){
 	lastModified = Date.now();
 	setLocalItem('lastModified', String(lastModified));
 
-	render();
-	updateUpgradeUI();
-	saveOnline();
+render();
+updateUpgradeUI();
 
-	return true;
+await saveOnline();
+
+return true;
 }
 
 // hook buttons (if present)
@@ -972,7 +972,7 @@ function attachHandlers(){
 				try{ setLocalSnapshot({ coins, energy, powerLv, maxEnergy, lastModified: new Date(lastModified).toISOString() }); }catch(e){}
 
 				// trigger save asynchronously (debounced) to avoid blocking the click handler
-				triggerSave(500);
+				await saveOnline();
 			}catch(err){
 				console.error('coin click handler error', err);
 				updateDebugPanel('coin click handler error: ' + String(err));
@@ -1114,13 +1114,13 @@ if (!data) {
 		}catch(ex){ console.warn('energyTimer restore failed', ex); }
 
 	// persist loaded values locally so reloads show same state immediately
-	localStorage.setItem('coins', String(coins));
-	localStorage.setItem('energy', String(energy));
-	localStorage.setItem('powerLv', String(powerLv));
-	localStorage.setItem('energyLv', String(energyLv));
-	localStorage.setItem('mineLv', String(mineLv));
-	localStorage.setItem('chargeLv', String(chargeLv));
-	localStorage.setItem('maxEnergy', String(maxEnergy));
+setLocalItem('coins', String(coins));
+setLocalItem('energy', String(energy));
+setLocalItem('powerLv', String(powerLv));
+setLocalItem('energyLv', String(energyLv));
+setLocalItem('mineLv', String(mineLv));
+setLocalItem('chargeLv', String(chargeLv));
+setLocalItem('maxEnergy', String(maxEnergy));
 
 recalcDerived();
 
