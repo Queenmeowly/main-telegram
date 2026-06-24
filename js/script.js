@@ -267,6 +267,9 @@ onConflict:'telegram_id'
 .select()
 			console.log('saveOnline: upsert response', resp);
 			data = resp.data; error = resp.error; status = resp.status;
+			try{
+				updateSaveStats({ state: error ? 'error' : 'saved', ts: Date.now(), response: resp, coins: minimalPayload.coins, energy: minimalPayload.energy });
+			}catch(e){ console.warn('failed to update saveStats with upsert resp', e); }
 
 			// If upsert returned no data or an error, attempt a raw REST fallback
 			async function tryRestFallback(payload){
