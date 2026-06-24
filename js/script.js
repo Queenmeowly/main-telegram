@@ -157,7 +157,7 @@ if (
 				energyTimerEnd = now + ENERGY_INTERVAL * 1000;
 				localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
 				// persist this scheduled timer to server so refreshes/devices keep the same countdown
-				try{ saveOnline(); }catch(e){}
+					try{ saveOnline(true); }catch(e){}
 			}
 		}
 
@@ -177,21 +177,21 @@ if (
 				// schedule next grant after the intervals that already passed
 				energyTimerEnd = energyTimerEnd + intervalsPassed * intervalMs;
 				localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
-				// persist updated timer to server
-				try{ saveOnline(); }catch(e){}
+					// persist updated timer to server
+					try{ saveOnline(true); }catch(e){}
 			} else {
 				// reached max — clear timer
 				energyTimerEnd = 0;
 				localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
-				// persist clear timer to server
-				try{ saveOnline(); }catch(e){}
+					// persist clear timer to server
+					try{ saveOnline(true); }catch(e){}
 			}
 
 			// if energy changed, persist locally and try to save online
-			if(energy !== prevEnergy){
-				localStorage.setItem('energy', String(energy));
-				try{ saveOnline(); }catch(e){}
-			}
+				if(energy !== prevEnergy){
+					localStorage.setItem('energy', String(energy));
+					try{ saveOnline(true); }catch(e){}
+				}
 
 			render();
 		}
@@ -207,8 +207,11 @@ if (
 	}
 
 // Save current state to server (wrapped and fixed)
-async function saveOnline(){
-	if(_saveInProgress){ _savePending = true; return; }
+async function saveOnline(force = false){
+	if(_saveInProgress){
+		if(!force){ _savePending = true; return; }
+		console.log('saveOnline: force=true, proceeding despite another save in progress');
+	}
 	_saveInProgress = true;
 	// reflect UI state
 	updateSaveStats({ state: 'saving' });
@@ -303,13 +306,16 @@ onConflict:'telegram_id'
 					status = fb.status;
 					console.log('saveOnline: REST fallback success', fb.status, fb.data);
 					updateDebugPanel('REST fallback saved: ' + JSON.stringify(fb.data));
+					try{ updateSaveStats({ state: 'saved', ts: Date.now(), coins: minimalPayload.coins, energy: minimalPayload.energy, response: fb.data, status: fb.status }); }catch(e){}
 				} else {
 					console.warn('saveOnline: REST fallback failed', fb);
 					updateDebugPanel('REST fallback failed: ' + JSON.stringify(fb));
+					try{ updateSaveStats({ state: 'error', message: 'REST fallback failed', response: fb }); }catch(e){}
 				}
 			}
 		}catch(netErr){
 			console.error('saveOnline network exception', netErr);
+			try{ updateSaveStats({ state: 'error', message: (netErr && netErr.message) ? netErr.message : String(netErr) }); }catch(e){}
 			showSaveBanner('Save network error: ' + (netErr && netErr.message ? netErr.message : String(netErr)), true);
 			// surface to debug panel as well
 			updateDebugPanel('saveOnline network exception: ' + String(netErr));
@@ -321,6 +327,7 @@ onConflict:'telegram_id'
 			console.log('saveOnline payload was', minimalPayload);
 			// if 401/403 likely RLS or auth issue
 			if(status === 401 || status === 403){
+				try{ updateSaveStats({ state: 'error', message: 'permission denied (RLS / API key)', status, error: error, payload: minimalPayload }); }catch(e){}
 				showSaveBanner('Save failed: permission denied (RLS / API key). Check Supabase policies.', true);
 				updateDebugPanel('supabase upsert permission error: ' + status + ' ' + JSON.stringify(error));
 			}
@@ -340,6 +347,7 @@ onConflict:'telegram_id'
 			}catch(ignore){}
 
 			if(error){
+				try{ updateSaveStats({ state: 'error', message: (error && error.message) ? error.message : JSON.stringify(error), status, payload: minimalPayload }); }catch(e){}
 				showSaveBanner('Save failed: ' + status + ' ' + (error && error.message ? error.message : JSON.stringify(error)), true);
 				updateDebugPanel('supabase upsert error: ' + status + ' ' + JSON.stringify(error));
 			}
@@ -360,6 +368,7 @@ onConflict:'telegram_id'
 						localStorage.setItem('energy', String(energy));
 						// update succeeded — clear pending last_grant so we don't resend it
 						_pendingLastGrant = null;
+						try{ updateSaveStats({ state: 'saved', ts: Date.now(), coins: coins, energy: energy, response: d2 }); }catch(e){}
 					} else {
 						// update affected no rows — try insert as last resort
 						try{
@@ -372,6 +381,7 @@ onConflict:'telegram_id'
 							} else {
 								console.log('insert fallback saved:', insData);
 								updateDebugPanel('insert fallback saved: ' + JSON.stringify(insData));
+									try{ updateSaveStats({ state: 'saved', ts: Date.now(), coins: minimalPayload.coins, energy: minimalPayload.energy, response: insData, status: insStatus }); }catch(e){}
 if(insData){
 const row =
 Array.isArray(insData)
@@ -509,12 +519,23 @@ function updateSaveStats(obj){
 			s.innerText = 'Saved';
 			s.style.color = '#8ef27a';
 			w.innerText = 'at ' + (obj.ts ? new Date(obj.ts).toLocaleString() : new Date().toLocaleString());
-			v.innerText = `coins: ${obj.coins ?? coins}, energy: ${obj.energy ?? energy}`;
+			let lines = [];
+			lines.push(`coins: ${obj.coins ?? coins}, energy: ${obj.energy ?? energy}`);
+			if(obj.response) try{ lines.push('resp: '+(typeof obj.response === 'string' ? obj.response : JSON.stringify(obj.response))); }catch(e){}
+			if(obj.payload) try{ lines.push('payload: '+JSON.stringify(obj.payload)); }catch(e){}
+			let out = lines.join('\n');
+			if(out.length > 800) out = out.slice(0,800) + '...';
+			v.innerText = out;
 		} else if(obj.state === 'error'){
 			s.innerText = 'Save Error';
 			s.style.color = '#ff8a80';
 			w.innerText = obj.message ? obj.message : '';
-			v.innerText = '';
+			let parts = [];
+			if(obj.response) try{ parts.push('resp: '+(typeof obj.response === 'string' ? obj.response : JSON.stringify(obj.response))); }catch(e){}
+			if(obj.payload) try{ parts.push('payload: '+JSON.stringify(obj.payload)); }catch(e){}
+			let ov = parts.join('\n');
+			if(ov.length > 800) ov = ov.slice(0,800) + '...';
+			v.innerText = ov;
 		} else {
 			s.innerText = 'Idle';
 			s.style.color = '#ffffff';
@@ -642,10 +663,11 @@ async function tryUpgrade(kind){
 	lastModified = Date.now();
 	setLocalItem('lastModified', String(lastModified));
 
-render();
-updateUpgradeUI();
+	render();
+	updateUpgradeUI();
 
-await saveOnline();
+	try{ updateSaveStats({ state: 'saving' }); }catch(e){}
+	await saveOnline(true);
 
 return true;
 }
@@ -746,7 +768,7 @@ function updateEnergyTimer(){
 			energyTimerEnd = now + ENERGY_INTERVAL * 1000;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 			// persist this scheduled timer to server so refreshes/devices keep the same countdown
-			try{ saveOnline(); }catch(e){}
+			try{ saveOnline(true); }catch(e){}
 		}
 	}
 
@@ -767,19 +789,19 @@ function updateEnergyTimer(){
 			energyTimerEnd = energyTimerEnd + intervalsPassed * intervalMs;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 			// persist updated timer to server
-			try{ saveOnline(); }catch(e){}
+			try{ saveOnline(true); }catch(e){}
 		} else {
 			// reached max — clear timer
 			energyTimerEnd = 0;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-			// persist clear timer to server
-			try{ saveOnline(); }catch(e){}
+				// persist clear timer to server
+				try{ saveOnline(true); }catch(e){}
 		}
 
 		// if energy changed, persist locally and try to save online
 		if(energy !== prevEnergy){
 			localStorage.setItem('energy', String(energy));
-			try{ saveOnline(); }catch(e){}
+				try{ saveOnline(true); }catch(e){}
 		}
 
 		render();
@@ -993,7 +1015,7 @@ function addDebugControls(){
 	btn.innerText = 'Test DB Save';
 	btn.style.position = 'fixed';
 	btn.style.right = '12px';
-	btn.style.bottom = '12px';
+	btn.style.bottom = '84px';
 	btn.style.zIndex = 9999999;
 	btn.style.padding = '8px 12px';
 	btn.style.borderRadius = '8px';
@@ -1003,7 +1025,8 @@ function addDebugControls(){
 	btn.onclick = async ()=>{
 		try{
 			showSaveBanner('Testing DB save...', false);
-			await saveOnline();
+				try{ updateSaveStats({ state: 'saving' }); }catch(e){}
+				await saveOnline(true);
 			showSaveBanner('Test save completed. Check DB dashboard.', false);
 		}catch(e){
 			showSaveBanner('Test save failed: ' + (e && e.message ? e.message : String(e)), true);
@@ -1049,8 +1072,9 @@ function attachHandlers(){
 				// store a short-lived snapshot to prefer over server row if it's very recent
 				try{ setLocalSnapshot({ coins, energy, powerLv, maxEnergy, lastModified: new Date(lastModified).toISOString() }); }catch(e){}
 
-				// trigger save asynchronously (debounced) to avoid blocking the click handler
-				await saveOnline();
+				// trigger immediate save to persist this click to DB
+				try{ updateSaveStats({ state: 'saving' }); }catch(e){}
+				await saveOnline(true);
 			}catch(err){
 				console.error('coin click handler error', err);
 				updateDebugPanel('coin click handler error: ' + String(err));
@@ -1082,7 +1106,7 @@ if (error) {
 
 if (!data) {
   console.log("user not found → creating...");
-  await saveOnline();
+	await saveOnline(true);
   return;
 }
 
@@ -1101,7 +1125,7 @@ if (!data) {
 						powerLv = Number(localSnap.powerLv) || powerLv;
 						maxEnergy = Number(localSnap.maxEnergy) || maxEnergy;
 						// push snapshot to server to reconcile
-						try{ await saveOnline(); }catch(e){ updateDebugPanel('save after applying snapshot failed: '+String(e)); }
+						try{ await saveOnline(true); }catch(e){ updateDebugPanel('save after applying snapshot failed: '+String(e)); }
 					}catch(e){ console.warn('apply local snapshot failed', e); }
 					_applyingLocalSnapshot = false;
 				} else {
@@ -1175,7 +1199,7 @@ if (!data) {
 							energy = Math.min(maxEnergy, energy + totalGain);
 							localStorage.setItem('energy', String(energy));
 							updateDebugPanel('Applied offline gain from last_grant: +' + totalGain + ' energy');
-							try{ await saveOnline(); }catch(e){ updateDebugPanel('save after offline apply failed: ' + String(e)); }
+							try{ await saveOnline(true); }catch(e){ updateDebugPanel('save after offline apply failed: ' + String(e)); }
 						}
 						// next scheduled grant time after last_grant
 						energyTimerEnd = last + (intervalsPassed + 1) * intervalMs;
@@ -1186,7 +1210,7 @@ if (!data) {
 					// 3) fallback: if nothing stored and no server info, start a timer now
 					energyTimerEnd = now + ENERGY_INTERVAL * 1000;
 					localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-					try{ saveOnline(); }catch(e){}
+					try{ saveOnline(true); }catch(e){}
 				}
 			}
 		}catch(ex){ console.warn('energyTimer restore failed', ex); }
@@ -1229,7 +1253,7 @@ render();
 try{ attachHandlers(); }catch(e){}
 
 // try to save once after load to ensure DB row exists
-try{ await saveOnline(); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
+try{ await saveOnline(true); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
 
 updateEnergyTimer();
 
