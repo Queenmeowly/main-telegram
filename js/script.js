@@ -350,29 +350,21 @@ function updateEnergyTimer(){
 	}
 
 	// if energy is below max and there's no active timer, restore from storage or start a new one
+// if energy is below max and there's no active timer, restore from storage or start a new one
 if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
+	const stored = Number(localStorage.getItem('energyTimerEnd')) || 0;
 
-	const stored =
-		parseInt(localStorage.getItem("energyTimerEnd")) || 0;
-
-	if(stored){
-
+	if(stored && stored > now){
 		energyTimerEnd = stored;
 
-	}else{
+	} else {
 
-		const passed =
-			parseInt(localStorage.getItem("energyPassed")) || 0;
-
-		energyTimerEnd =
-			Date.now() + Math.max(0,
-			(ENERGY_INTERVAL - passed)) * 1000;
+		energyTimerEnd = now + ENERGY_INTERVAL * 1000;
 
 		localStorage.setItem(
-			"energyTimerEnd",
+			'energyTimerEnd',
 			String(energyTimerEnd)
 		);
-
 	}
 }
 
