@@ -636,43 +636,25 @@ if (!data) {
     maxEnergy = data.max_energy ?? 100;
 	energyTimerEnd = Number(data.energy_timer_end) || 0;
 		// restore or compute a proper energyTimerEnd so countdown continues across refreshes and while offline
-		try{
-			const now = Date.now();
+		try {
 
-			// 1) Prefer local stored timer if valid
-			const stored = Number(localStorage.getItem('energyTimerEnd')) || 0;
-			if(stored && stored > now){
-				energyTimerEnd = stored;
-			} else if(data.last_grant){
-				// 2) If server provided last_grant, compute next timer based on that
-				const last = Date.parse(data.last_grant);
-				if(!isNaN(last)){
-					const intervalMs = ENERGY_INTERVAL * 1000;
-					const passedMs = Math.max(0, now - last);
-					const intervalsPassed = Math.floor(passedMs / intervalMs);
-					// next scheduled grant time after last_grant
-					energyTimerEnd = last + (intervalsPassed + 1) * intervalMs;
-					// if the computed time is already passed, clamp by adding one interval
-					if(energyTimerEnd <= now) energyTimerEnd = now + intervalMs;
-					localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-					// Also apply missed grants immediately (keep offline accumulation)
-					const gainPer = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
-					const totalIntervals = intervalsPassed;
-					if(totalIntervals > 0){
-						const totalGain = totalIntervals * gainPer;
-						const before = energy;
-						energy = Math.min(maxEnergy, energy + totalGain);
-						localStorage.setItem('energy', String(energy));
-						updateDebugPanel('Applied offline gain from last_grant: +' + totalGain + ' energy');
-						try{ await saveOnline(); }catch(e){ updateDebugPanel('save after offline apply failed: ' + String(e)); }
-					}
-				}
-			} else if(energy < maxEnergy){
-				// 3) fallback: if nothing stored and no server info, start a timer now
-				energyTimerEnd = now + ENERGY_INTERVAL * 1000;
-				localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-			}
-		}catch(ex){ console.warn('energyTimer restore failed', ex); }
+	energyTimerEnd =
+		Number(data.energy_timer_end) ||
+		0;
+
+	localStorage.setItem(
+		"energyTimerEnd",
+		String(energyTimerEnd)
+	);
+
+} catch (ex) {
+
+	console.warn(
+		"energyTimer restore failed",
+		ex
+	);
+
+}
 
 	// persist loaded values locally so reloads show same state immediately
 	localStorage.setItem('coins', String(coins));
