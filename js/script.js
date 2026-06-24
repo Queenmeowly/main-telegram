@@ -7,79 +7,6 @@ SUPABASE_URL,
 SUPABASE_KEY
 );
 
-// global state defaults (persisted values are loaded from localStorage)
-// start with defaults; prefer authoritative values from the server (DB)
-let coins = 0;
-let energy = 100;
-let powerLv = 1;
-let energyLv = 1;
-let mineLv = 1;
-let chargeLv = 1;
-let maxEnergy = 100;
-let energyGain = energyLv;
-let energyTimerEnd = 0;
-const ENERGY_INTERVAL = Number(localStorage.getItem('ENERGY_INTERVAL')) || 60; // seconds
-let particles = [];
-
-let power = powerLv;
-
-// last modified timestamp (ms) used to resolve conflicts and avoid rollback on refresh
-let lastModified = Number(localStorage.getItem('lastModified')) || Date.now();
-
-// save control flags
-let _saveInProgress = false;
-let _savePending = false;
-let _pendingLastGrant = null;
-
-
-function markModified(){
-	lastModified = Date.now();
-	try{ localStorage.setItem('lastModified', String(lastModified)); }catch(e){}
-}
-
-// helper that writes to localStorage using the original setter if it was preserved
-function setLocalItem(k, v){
-	try{
-		if(localStorage && localStorage._original_setItem){
-			localStorage._original_setItem.call(localStorage, k, v);
-		} else {
-			localStorage.setItem(k, v);
-		}
-	}catch(e){}
-}
-
-function setLocalSnapshot(obj){
-	try{
-		const snap = Object.assign({ ts: Date.now() }, obj || {});
-		setLocalItem('local_snapshot', JSON.stringify(snap));
-	}catch(e){}
-}
-
-function getLocalSnapshot(){
-	try{
-		const s = localStorage.getItem('local_snapshot');
-		if(!s) return null;
-		return JSON.parse(s);
-	}catch(e){ return null; }
-}
-
-// prevent recursive load <-> save loops when applying a local snapshot
-let _applyingLocalSnapshot = false;
-
-function parseTimerValue(v){
-	if(!v) return 0;
-	const n = Number(v);
-	if(!isNaN(n) && n > 0) return n;
-	const p = Date.parse(v);
-	return isNaN(p) ? 0 : p;
-}
-
-function updateDebugPanel(msg){
-	const el = document.getElementById('debugPanel');
-	if(el) el.innerText = msg;
-	else console.log(msg);
-}
-
 // ================= TELEGRAM LOGIN =================
 
 console.log("INIT DATA:", window.Telegram?.WebApp?.initDataUnsafe);
@@ -91,249 +18,136 @@ let USER_USERNAME = "";
 let USER_PHOTO = "";
 
 if (
-	window.Telegram &&
-	window.Telegram.WebApp &&
-	window.Telegram.WebApp.initDataUnsafe &&
-	window.Telegram.WebApp.initDataUnsafe.user
-){
+    window.Telegram &&
+    window.Telegram.WebApp &&
+    window.Telegram.WebApp.initDataUnsafe &&
+    window.Telegram.WebApp.initDataUnsafe.user
+) {
 
-	window.Telegram.WebApp.ready();
+    window.Telegram.WebApp.ready();
 
-	const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
+    const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
 
-	USER = String(tgUser.id);
-	USER_NAME = tgUser.first_name || "";
-	USER_USERNAME = tgUser.username || "";
-	USER_PHOTO = tgUser.photo_url || "";
+    USER = String(tgUser.id);
+    USER_NAME = tgUser.first_name || "";
+    USER_USERNAME = tgUser.username || "";
+    USER_PHOTO = tgUser.photo_url || "";
 
-	console.log("Telegram User:", USER, USER_NAME);
-
-	// normalize USER to numeric when possible to match DB numeric telegram_id columns
-	if(!isNaN(Number(USER))){ USER = Number(USER); }
+    console.log("Telegram User:", USER, USER_NAME);
 
 } else {
 
-	console.warn("Telegram WebApp not detected, fallback user");
+    console.warn("Telegram WebApp not detected, fallback user");
 
-	let stored = localStorage.getItem("user_id");
+    let stored = localStorage.getItem("user_id");
 
-	if(!stored){
-		stored = String(Date.now());
-		if(localStorage._original_setItem){
-			try{ localStorage._original_setItem.call(localStorage, "user_id", stored); }catch(e){ localStorage.setItem("user_id", stored); }
-		} else {
-			localStorage.setItem("user_id", stored);
-		}
-	}
+    if (!stored) {
+        stored = String(Date.now());
+        localStorage.setItem("user_id", stored);
+    }
 
-	// when Telegram WebApp is not available, use a local persistent id as USER
-	USER = String(stored);
-	USER_NAME = 'guest';
+    USER = String(stored);
+    USER_NAME = "Test User";
+    USER_USERNAME = "test";
+    USER_PHOTO = "";
+}
 
-	// normalize guest id if it's numeric-like (rare)
-	if(!isNaN(Number(USER))){ USER = Number(USER); }
+// فقط این try باید بیرون باشه (درست و ساده)
+document.addEventListener("DOMContentLoaded", () => {
+    try {
+        updateDebugPanel("USER SET: " + USER + " | NAME: " + USER_NAME + " | USERNAME: " + USER_USERNAME);
+    } catch (e) {}
+});
+document.addEventListener("DOMContentLoaded", () => {
+  updateDebugPanel("USER SET: " + USER);
+});
+// Force-disable debug panel (prevent save/status UI from appearing)
+const DEBUG_PANEL_ENABLED = false;
+let coins = Number(localStorage.getItem('coins')) || 0;
+let energy = Number(localStorage.getItem('energy')) || 100;
 
-	function updateEnergyTimer(){
-		ensureEnergyTimerElement();
-		const el = document.getElementById("energyTimer");
+let powerLv = Number(localStorage.getItem('powerLv')) || 1;
+let energyLv = Number(localStorage.getItem('energyLv')) || 1;
+let mineLv = Number(localStorage.getItem('mineLv')) || 1;
+let chargeLv = Number(localStorage.getItem('chargeLv')) || 1;
 
-		const now = Date.now();
+let maxEnergy = Number(localStorage.getItem('maxEnergy')) || 100;
 
-		if(energy >= maxEnergy){
-			el.innerText = "";
-			energyTimerEnd = 0;
-			localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
-			return;
-		}
+let energyTimerEnd = Number(localStorage.getItem('energyTimerEnd')) || 0;
+const ENERGY_INTERVAL = 30 * 60; // seconds (default 30 minutes)
 
-		// if energy is below max and there's no active timer, restore from storage or start a new one
-		if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
-			const storedRaw = localStorage.getItem('energyTimerEnd');
-			const stored = parseTimerValue(storedRaw) || 0;
-			console.log('energyTimer restore: localRaw=', storedRaw, 'parsed=', stored, 'now=', now);
-			if(stored && stored > now){
-				energyTimerEnd = stored;
-			} else {
-				energyTimerEnd = now + ENERGY_INTERVAL * 1000;
-				localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
-				// persist this scheduled timer to server so refreshes/devices keep the same countdown
-					try{ saveOnline(true); }catch(e){}
-			}
-		}
+let energyGain = energyLv;
+const particles = [];
 
-		// only grant when a timer is active and it has reached 0
-		if(energyTimerEnd && energyTimerEnd <= now){
-			const intervalMs = ENERGY_INTERVAL * 1000;
-			// how many intervals have passed since the scheduled next grant
-			const passedMs = now - energyTimerEnd;
-			const intervalsPassed = 1 + Math.floor(passedMs / intervalMs);
-			const gainPer = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
-			const totalGain = intervalsPassed * gainPer;
+// save control
+let _saveInProgress = false;
+let _savePending = false;
+// when we apply offline grants, store the timestamp of the last grant to persist to server
+let _pendingLastGrant = null;
 
-			const prevEnergy = energy;
-			energy = Math.min(maxEnergy, energy + totalGain);
+// Debug/status panel for environments without a console (Telegram WebView)
+function ensureDebugPanel(){
+	// intentionally no-op to prevent creation of the save/status UI
+	return;
+}
 
-			if(energy < maxEnergy){
-				// schedule next grant after the intervals that already passed
-				energyTimerEnd = energyTimerEnd + intervalsPassed * intervalMs;
-				localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
-					// persist updated timer to server
-					try{ saveOnline(true); }catch(e){}
-			} else {
-				// reached max — clear timer
-				energyTimerEnd = 0;
-				localStorage.setItem('energyTimerEnd', String(Number(energyTimerEnd)));
-					// persist clear timer to server
-					try{ saveOnline(true); }catch(e){}
-			}
+function updateDebugPanel(msg){
+	// intentionally no-op so no debug messages are shown in UI
+	return;
+}
 
-			// if energy changed, persist locally and try to save online
-				if(energy !== prevEnergy){
-					localStorage.setItem('energy', String(energy));
-					try{ saveOnline(true); }catch(e){}
-				}
-
-			render();
-		}
-
-		if(energyTimerEnd){
-			const remaining = Math.ceil((energyTimerEnd - now) / 1000);
-			const gain = (typeof energyGain !== 'undefined' ? energyGain : energyLv);
-			el.innerText = `${formatDuration(remaining)} | + ${gain} energy`;
-		} else {
-			el.innerText = "";
-		}
-
-	}
-
-// Save current state to server (wrapped and fixed)
-async function saveOnline(force = false){
+// ================= SAVE =================
+async function saveOnline(){
+	// simple single-writer lock to avoid race conditions when saveOnline is called rapidly
 	if(_saveInProgress){
-		if(!force){ _savePending = true; return; }
-		console.log('saveOnline: force=true, proceeding despite another save in progress');
+		_savePending = true;
+		return;
 	}
+
 	_saveInProgress = true;
-	// reflect UI state
-	updateSaveStats({ state: 'saving' });
 	try{
-const minimalPayload = {
-	// try to use numeric id when possible so DB equality matches numeric columns
-	telegram_id: (isNaN(Number(USER)) ? USER : Number(USER)),
+		updateDebugPanel('saveOnline() - USER: ' + String(USER));
+		console.log("SAVE DATA:", {
+telegram_id: USER,			coins,
+			energy,
+			power: powerLv,
+			max_energy: maxEnergy
+		});
+		updateDebugPanel('SAVE DATA: coins=' + String(coins) + ' energy=' + String(energy) + ' power=' + String(powerLv));
 
-  coins: Number(coins),
-  energy: Number(energy),
-
-  power: Number(powerLv),
-  max_energy: Number(maxEnergy),
-
-  energy_lv: Number(energyLv),
-  mine_lv: Number(mineLv),
-  charge_lv: Number(chargeLv),
-
-  first_name: USER_NAME,
-  username: USER_USERNAME,
-
-season:"1",
-
-last_modified:
-new Date().toISOString()
-  
-
-};
-
-		// include local lastModified so server can decide which version is newest
-		minimalPayload.last_modified = new Date(Number(lastModified)).toISOString();
+		const minimalPayload = {
+telegram_id: USER,
+			coins: Number(coins),
+			energy: Number(energy),
+			power: Number(powerLv),
+			max_energy: Number(maxEnergy)
+		};
 
 		// include last_grant only when we specifically set one (from offline grant computation)
-		if(_pendingLastGrant){ minimalPayload.last_grant = _pendingLastGrant; }
-
-		// include lastModified in local storage
-		localStorage.setItem('lastModified', String(lastModified));
+		if(_pendingLastGrant){
+			minimalPayload.last_grant = _pendingLastGrant;
+		}
 
 		// persist the next scheduled grant time so timer continues across devices/refreshes
 		if(energyTimerEnd && energy < maxEnergy){
-			try{ minimalPayload.energy_timer_end = new Date(Number(energyTimerEnd)).toISOString(); }catch(e){}
+			try{
+				minimalPayload.energy_timer_end = new Date(Number(energyTimerEnd)).toISOString();
+			}catch(e){ /* ignore */ }
 		}
 
 		// use array form and request representation so we get the saved row back
 		let data, error, status;
 		try{
-			console.log('saveOnline: saving payload', minimalPayload, 'USER=', USER);
-			const resp = await db
-.from('users')
-.upsert([minimalPayload], {
-onConflict:'telegram_id'
-})
-.select()
-			console.log('saveOnline: upsert response', resp);
+			const resp = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
 			data = resp.data; error = resp.error; status = resp.status;
-			try{
-				updateSaveStats({ state: error ? 'error' : 'saved', ts: Date.now(), response: resp, coins: minimalPayload.coins, energy: minimalPayload.energy });
-			}catch(e){ console.warn('failed to update saveStats with upsert resp', e); }
-
-			// If upsert returned no data or an error, attempt a raw REST fallback
-			async function tryRestFallback(payload){
-				try{
-					const url = SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/users';
-					const resp = await fetch(url, {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-							'apikey': SUPABASE_KEY,
-							'Authorization': 'Bearer ' + SUPABASE_KEY,
-							'Prefer': 'return=representation'
-						},
-						body: JSON.stringify(payload)
-					});
-					const text = await resp.text();
-					let json = null;
-					try{ json = JSON.parse(text); }catch(e){}
-					console.log('forceSaveViaRest', resp.status, json || text);
-					updateDebugPanel('forceSaveViaRest status:'+resp.status+' body:'+text);
-					return { status: resp.status, data: json, text };
-				}catch(e){
-					console.error('forceSaveViaRest exception', e);
-					updateDebugPanel('forceSaveViaRest exception: '+String(e));
-					return { error: e };
-				}
-			};
-
-			// If upsert didn't return a saved row, try REST fallback
-			if((!data || (Array.isArray(data) && data.length === 0)) || error){
-				console.log('saveOnline: upsert returned no data or error, trying REST fallback');
-				const fb = await tryRestFallback(minimalPayload);
-				if(fb && fb.status && (fb.status === 201 || fb.status === 200)){
-					// success — REST returned representation
-					data = fb.data;
-					error = null;
-					status = fb.status;
-					console.log('saveOnline: REST fallback success', fb.status, fb.data);
-					updateDebugPanel('REST fallback saved: ' + JSON.stringify(fb.data));
-					try{ updateSaveStats({ state: 'saved', ts: Date.now(), coins: minimalPayload.coins, energy: minimalPayload.energy, response: fb.data, status: fb.status }); }catch(e){}
-				} else {
-					console.warn('saveOnline: REST fallback failed', fb);
-					updateDebugPanel('REST fallback failed: ' + JSON.stringify(fb));
-					try{ updateSaveStats({ state: 'error', message: 'REST fallback failed', response: fb }); }catch(e){}
-				}
-			}
 		}catch(netErr){
 			console.error('saveOnline network exception', netErr);
-			try{ updateSaveStats({ state: 'error', message: (netErr && netErr.message) ? netErr.message : String(netErr) }); }catch(e){}
 			showSaveBanner('Save network error: ' + (netErr && netErr.message ? netErr.message : String(netErr)), true);
-			// surface to debug panel as well
-			updateDebugPanel('saveOnline network exception: ' + String(netErr));
 			throw netErr;
 		}
 
 		if(error){
 			console.warn('supabase upsert error', status, error);
-			console.log('saveOnline payload was', minimalPayload);
-			// if 401/403 likely RLS or auth issue
-			if(status === 401 || status === 403){
-				try{ updateSaveStats({ state: 'error', message: 'permission denied (RLS / API key)', status, error: error, payload: minimalPayload }); }catch(e){}
-				showSaveBanner('Save failed: permission denied (RLS / API key). Check Supabase policies.', true);
-				updateDebugPanel('supabase upsert permission error: ' + status + ' ' + JSON.stringify(error));
-			}
 			// if the error is a missing column in the schema (e.g. energy_timer_end), remove the field and retry once
 			try{
 				const msg = (error && error.message) ? String(error.message) : '';
@@ -345,12 +159,13 @@ onConflict:'telegram_id'
 					try{
 						const resp2 = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
 						data = resp2.data; error = resp2.error; status = resp2.status;
-					}catch(e2){ console.error('retry upsert after removing missing column failed', e2); }
+					}catch(e2){
+						console.error('retry upsert after removing missing column failed', e2);
+					}
 				}
 			}catch(ignore){}
 
 			if(error){
-				try{ updateSaveStats({ state: 'error', message: (error && error.message) ? error.message : JSON.stringify(error), status, payload: minimalPayload }); }catch(e){}
 				showSaveBanner('Save failed: ' + status + ' ' + (error && error.message ? error.message : JSON.stringify(error)), true);
 				updateDebugPanel('supabase upsert error: ' + status + ' ' + JSON.stringify(error));
 			}
@@ -360,7 +175,7 @@ onConflict:'telegram_id'
 				if(e2) console.warn('supabase update fallback error', s2, e2);
 				if(e2) { updateDebugPanel('supabase update fallback error: ' + s2 + ' ' + JSON.stringify(e2)); showSaveBanner('Update fallback failed: ' + s2 + ' ' + (e2 && e2.message ? e2.message : JSON.stringify(e2)), true); }
 				else {
-					console.log('update fallback saved (rows):', Array.isArray(d2) ? d2.length : d2, d2);
+					console.log('update fallback saved:', d2);
 					updateDebugPanel('update fallback saved: ' + JSON.stringify(d2));
 					// sync local values to returned row if present
 					if(Array.isArray(d2) && d2[0]){
@@ -371,65 +186,30 @@ onConflict:'telegram_id'
 						localStorage.setItem('energy', String(energy));
 						// update succeeded — clear pending last_grant so we don't resend it
 						_pendingLastGrant = null;
-						try{ updateSaveStats({ state: 'saved', ts: Date.now(), coins: coins, energy: energy, response: d2 }); }catch(e){}
-					} else {
-						// update affected no rows — try insert as last resort
-						try{
-							console.log('update affected no rows, trying insert fallback');
-							const { data: insData, error: insErr, status: insStatus } = await db.from('users').insert([minimalPayload]);
-							if(insErr){
-								console.warn('insert fallback error', insStatus, insErr);
-								updateDebugPanel('insert fallback error: ' + insStatus + ' ' + JSON.stringify(insErr));
-								showSaveBanner('Insert fallback failed: ' + insStatus, true);
-							} else {
-								console.log('insert fallback saved:', insData);
-								updateDebugPanel('insert fallback saved: ' + JSON.stringify(insData));
-									try{ updateSaveStats({ state: 'saved', ts: Date.now(), coins: minimalPayload.coins, energy: minimalPayload.energy, response: insData, status: insStatus }); }catch(e){}
-if(insData){
-const row =
-Array.isArray(insData)
-? insData[0]
-: insData;
-
-coins=row.coins??coins;
-energy=row.energy??energy;
-									coins = insData[0].coins ?? coins;
-									energy = insData[0].energy ?? energy;
-									localStorage.setItem('coins', String(coins));
-									localStorage.setItem('energy', String(energy));
-									_pendingLastGrant = null;
-									try{ showSaveBanner('Saved to DB (insert)', false); }catch(e){}
-								}
-							}
-						}catch(insEx){ console.error('insert fallback unexpected error', insEx); updateDebugPanel('insert fallback error: '+String(insEx)); }
 					}
 				}
-			}catch(ex){ console.error('update fallback unexpected error', ex); }
+			}catch(ex){
+				console.error('update fallback unexpected error', ex);
+			}
 		} else {
 			console.log('saved (upsert):', USER, coins, data);
 			updateDebugPanel('saved (upsert) — telegram_id: ' + String(USER) + '\n' + JSON.stringify(data));
 			Telegram.WebApp && Telegram.WebApp.HapticFeedback && Telegram.WebApp.HapticFeedback.notificationOccurred && Telegram.WebApp.HapticFeedback.notificationOccurred("success");
 			// if server returned the saved row, sync it to localStorage to keep refresh stable
-if(data){
-const row = Array.isArray(data) ? data[0] : data;
-
-coins = row.coins ?? coins;
-energy = row.energy ?? energy;
-powerLv = row.power ?? powerLv;
-maxEnergy = row.max_energy ?? maxEnergy;
-				// persist snapshot using original setter so it's available across reloads
-				setLocalItem('coins', String(coins));
-				setLocalItem('energy', String(energy));
-				setLocalItem('powerLv', String(powerLv));
-				setLocalItem('maxEnergy', String(maxEnergy));
-				// also store a short-lived local snapshot for reconciling races
-				try{ setLocalSnapshot({ coins, energy, powerLv, maxEnergy, lastModified: row.last_modified || new Date().toISOString() }); }catch(e){}
-				// successful save — clear pending last_grant
-				_pendingLastGrant = null;
-				try{ 
-					updateSaveStats({ state: 'saved', ts: Date.now(), coins: coins, energy: energy });
-					showSaveBanner('Saved to DB', false); 
-				}catch(e){}
+			if(Array.isArray(data) && data[0]){
+				const row = data[0];
+				coins = row.coins ?? coins;
+				energy = row.energy ?? energy;
+				powerLv = row.power ?? powerLv;
+				maxEnergy = row.max_energy ?? maxEnergy;
+				localStorage.setItem('coins', String(coins));
+				localStorage.setItem('energy', String(energy));
+				localStorage.setItem('powerLv', String(powerLv));
+				localStorage.setItem('maxEnergy', String(maxEnergy));
+					// successful save — clear pending last_grant
+					_pendingLastGrant = null;
+					// show a subtle success banner (non-intrusive)
+					try{ showSaveBanner('Saved', false); }catch(e){}
 			}
 		}
 
@@ -437,22 +217,26 @@ maxEnergy = row.max_energy ?? maxEnergy;
 		try{
 			const { data: verifyRow, error: verifyErr } = await db.from('users').select('*').eq('telegram_id', USER).maybeSingle();
 			updateDebugPanel('verify select after saveOnline: ' + JSON.stringify(verifyRow) + ' err:' + String(verifyErr));
-		}catch(vE){ console.warn('verify select failed', vE); }
+		}catch(vE){
+			console.warn('verify select failed', vE);
+		}
 
 	}catch(err){
 		console.error('saveOnline unexpected error', err);
-		try{ 
-			updateSaveStats({ state: 'error', message: (err && err.message) ? err.message : String(err) });
-			showSaveBanner('Save failed: ' + (err && err.message ? err.message : String(err)), true);
-		}catch(e){}
+		// show visible banner inside the app so Telegram WebView users see save failures
+		try{ showSaveBanner('Save failed: ' + (err && err.message ? err.message : String(err)), true); }catch(e){}
 	}finally{
 		_saveInProgress = false;
-		if(_savePending){ _savePending = false; setTimeout(()=>saveOnline(), 50); }
+		// if there was a pending save requested while we were saving, do one more
+		if(_savePending){
+			_savePending = false;
+			// schedule next tick so we don't recurse deeply
+			setTimeout(()=>saveOnline(), 50);
+		}
 	}
 }
 
-}
-
+// small visible banner for displaying save errors/successes inside the WebApp
 function showSaveBanner(msg, isError){
 	try{
 		let b = document.getElementById('__save_banner');
@@ -481,90 +265,11 @@ function showSaveBanner(msg, isError){
 	}catch(e){ console.warn('showSaveBanner failed', e); }
 }
 
-// Save Stats Panel: a small UI to show latest save status and values
-function ensureSaveStatsPanel(){
-	if(document.getElementById('saveStatsPanel')) return;
-	const p = document.createElement('div');
-	p.id = 'saveStatsPanel';
-	p.style.position = 'fixed';
-	p.style.right = '12px';
-	p.style.bottom = '12px';
-	p.style.zIndex = 999999;
-	p.style.padding = '8px 12px';
-	p.style.borderRadius = '8px';
-	p.style.background = 'rgba(0,0,0,0.55)';
-	p.style.color = '#fff';
-	p.style.fontSize = '13px';
-	p.style.minWidth = '180px';
-	p.style.boxShadow = '0 8px 20px rgba(0,0,0,0.45)';
-
-	p.innerHTML = '<div style="font-weight:700;margin-bottom:6px;">Save Stats</div>' +
-				  '<div id="saveStatsState">Idle</div>' +
-				  '<div id="saveStatsWhen" style="opacity:0.85;font-size:12px;margin-top:6px"></div>' +
-				  '<div id="saveStatsVals" style="opacity:0.9;font-size:12px;margin-top:6px"></div>';
-
-	document.body.appendChild(p);
-}
-
-function updateSaveStats(obj){
-	try{
-		ensureSaveStatsPanel();
-		const s = document.getElementById('saveStatsState');
-		const w = document.getElementById('saveStatsWhen');
-		const v = document.getElementById('saveStatsVals');
-		if(!s || !w || !v) return;
-		if(obj.state === 'saving'){
-			s.innerText = 'Saving...';
-			s.style.color = '#ffd166';
-			w.innerText = '';
-			v.innerText = '';
-		} else if(obj.state === 'saved'){
-			s.innerText = 'Saved';
-			s.style.color = '#8ef27a';
-			w.innerText = 'at ' + (obj.ts ? new Date(obj.ts).toLocaleString() : new Date().toLocaleString());
-			let lines = [];
-			lines.push(`coins: ${obj.coins ?? coins}, energy: ${obj.energy ?? energy}`);
-			if(obj.response) try{ lines.push('resp: '+(typeof obj.response === 'string' ? obj.response : JSON.stringify(obj.response))); }catch(e){}
-			if(obj.payload) try{ lines.push('payload: '+JSON.stringify(obj.payload)); }catch(e){}
-			let out = lines.join('\n');
-			if(out.length > 800) out = out.slice(0,800) + '...';
-			v.innerText = out;
-		} else if(obj.state === 'error'){
-			s.innerText = 'Save Error';
-			s.style.color = '#ff8a80';
-			w.innerText = obj.message ? obj.message : '';
-			let parts = [];
-			if(obj.response) try{ parts.push('resp: '+(typeof obj.response === 'string' ? obj.response : JSON.stringify(obj.response))); }catch(e){}
-			if(obj.payload) try{ parts.push('payload: '+JSON.stringify(obj.payload)); }catch(e){}
-			let ov = parts.join('\n');
-			if(ov.length > 800) ov = ov.slice(0,800) + '...';
-			v.innerText = ov;
-		} else {
-			s.innerText = 'Idle';
-			s.style.color = '#ffffff';
-			w.innerText = '';
-			v.innerText = '';
-		}
-	}catch(e){ console.warn('updateSaveStats failed', e); }
-}
-
 // Autosave frequently so Telegram WebApp usage persists moment-to-moment
-// set to 3s per request
-const AUTOSAVE_INTERVAL_MS = 3 * 1000; // 3s
+const AUTOSAVE_INTERVAL_MS = 15 * 1000;
 setInterval(()=>{
-	try{ saveOnline(); }catch(e){ console.warn('autosave failed', e); }
+	try{ saveOnline(); }catch(e){}
 }, AUTOSAVE_INTERVAL_MS);
-
-// Debounced save trigger for UI-driven events to avoid blocking the UI and spamming the server
-let __triggerSaveTimer = null;
-function triggerSave(delay = 700){
-	if(_saveInProgress){ _savePending = true; return; }
-	if(__triggerSaveTimer) clearTimeout(__triggerSaveTimer);
-	__triggerSaveTimer = setTimeout(()=>{
-		__triggerSaveTimer = null;
-		try{ saveOnline(); }catch(e){ console.warn('triggered save failed', e); }
-	}, delay);
-}
 // ================= UI =================
 function render(){
 document.getElementById("coinsValue").innerText = coins;
@@ -589,34 +294,6 @@ function updateUpgradeUI(){
 	const ep = document.getElementById("energyPrice"); if(ep) ep.innerText = priceFor('energy', energyLv);
 	const mp = document.getElementById("minePrice"); if(mp) mp.innerText = priceFor('mine', mineLv);
 	const cp = document.getElementById("chargePrice"); if(cp) cp.innerText = priceFor('charge', chargeLv);
-
-	// affordability: highlight buttons the user can afford
-	try{
-		const prices = {
-			power: priceFor('power', powerLv),
-			energy: priceFor('energy', energyLv),
-			mine: priceFor('mine', mineLv),
-			charge: priceFor('charge', chargeLv)
-		};
-		const map = [ ['upPower','power'], ['upEnergy','energy'], ['upMine','mine'], ['upCharge','charge'] ];
-		map.forEach(([id, kind])=>{
-			const btn = document.getElementById(id);
-			const price = prices[kind];
-			if(btn){
-				if(Number(coins) >= Number(price)){
-					btn.classList.add('affordable');
-					btn.classList.remove('unaffordable');
-					btn.disabled = false;
-					btn.setAttribute('aria-disabled','false');
-				} else {
-					btn.classList.remove('affordable');
-					btn.classList.add('unaffordable');
-					try{ btn.disabled = true; }catch(e){}
-					btn.setAttribute('aria-disabled','true');
-				}
-			}
-		});
-	}catch(e){ /* ignore */ }
 }
 
 function recalcDerived(){
@@ -625,12 +302,9 @@ function recalcDerived(){
 	maxEnergy = 100 + (chargeLv - 1);
 	// amount of energy granted each interval equals energy level
 	energyGain = energyLv;
-	// update lastModified when derived values change
-	lastModified = Date.now();
-	localStorage.setItem('lastModified', String(lastModified));
 }
 
-async function tryUpgrade(kind){
+function tryUpgrade(kind){
 	let lvlVar = 1;
 
 	if(kind==='power') lvlVar = powerLv;
@@ -652,27 +326,18 @@ async function tryUpgrade(kind){
 
 	recalcDerived();
 
-	// persist upgrade changes using preserved setter
-	setLocalItem('coins', String(coins));
-	setLocalItem('powerLv', String(powerLv));
-	setLocalItem('energyLv', String(energyLv));
-	setLocalItem('mineLv', String(mineLv));
-	setLocalItem('chargeLv', String(chargeLv));
-	setLocalItem('maxEnergy', String(maxEnergy));
-
-	try{ setLocalSnapshot({ coins, energy, powerLv, energyLv, mineLv, chargeLv, maxEnergy, lastModified: new Date(lastModified).toISOString() }); }catch(e){}
-    
-	// mark last modified on user action
-	lastModified = Date.now();
-	setLocalItem('lastModified', String(lastModified));
+	localStorage.setItem('coins', String(coins));
+	localStorage.setItem('powerLv', String(powerLv));
+	localStorage.setItem('energyLv', String(energyLv));
+	localStorage.setItem('mineLv', String(mineLv));
+	localStorage.setItem('chargeLv', String(chargeLv));
+	localStorage.setItem('maxEnergy', String(maxEnergy));
 
 	render();
 	updateUpgradeUI();
+	saveOnline();
 
-	try{ updateSaveStats({ state: 'saving' }); }catch(e){}
-	await saveOnline(true);
-
-return true;
+	return true;
 }
 
 // hook buttons (if present)
@@ -683,8 +348,6 @@ function attachUpgradeButtons(){
 	const upMine = document.getElementById('upMine'); if(upMine) upMine.onclick = ()=> tryUpgrade('mine');
 	const upCharge = document.getElementById('upCharge'); if(upCharge) upCharge.onclick = ()=> tryUpgrade('charge');
 	updateUpgradeUI();
-	// ensure save stats UI exists
-	try{ ensureSaveStatsPanel(); }catch(e){ console.warn('ensureSaveStatsPanel init failed', e); }
 
 	// compact top menu: hamburger slides left, top buttons appear
 	const menuBtn = document.getElementById('menuBtn');
@@ -771,7 +434,7 @@ function updateEnergyTimer(){
 			energyTimerEnd = now + ENERGY_INTERVAL * 1000;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 			// persist this scheduled timer to server so refreshes/devices keep the same countdown
-			try{ saveOnline(true); }catch(e){}
+			try{ saveOnline(); }catch(e){}
 		}
 	}
 
@@ -792,19 +455,19 @@ function updateEnergyTimer(){
 			energyTimerEnd = energyTimerEnd + intervalsPassed * intervalMs;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 			// persist updated timer to server
-			try{ saveOnline(true); }catch(e){}
+			try{ saveOnline(); }catch(e){}
 		} else {
 			// reached max — clear timer
 			energyTimerEnd = 0;
 			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-				// persist clear timer to server
-				try{ saveOnline(true); }catch(e){}
+			// persist clear timer to server
+			try{ saveOnline(); }catch(e){}
 		}
 
 		// if energy changed, persist locally and try to save online
 		if(energy !== prevEnergy){
 			localStorage.setItem('energy', String(energy));
-				try{ saveOnline(true); }catch(e){}
+			try{ saveOnline(); }catch(e){}
 		}
 
 		render();
@@ -838,8 +501,6 @@ antialias:true
 });
 
 renderer.setSize(260,260);
-// limit pixel ratio to reduce GPU load on low-end devices (reduces lag in WebView)
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.6;
@@ -918,26 +579,17 @@ scene.add(coin);
 
 // ================= PARTICLES =================
 function spawnParticles(){
-	// spawn a small burst of particles; create a mesh per particle once and reuse until removed
-	const COUNT = 10; // fewer particles to reduce load
-	for(let i=0;i<COUNT;i++){
-		const mesh = new THREE.Mesh(
-			new THREE.SphereGeometry(0.06,6,6),
-			new THREE.MeshBasicMaterial({color:0xffd36b})
-		);
-		mesh.position.set(0,0,0);
-		scene.add(mesh);
-		particles.push({
-			x:0,
-			y:0,
-			z:0,
-			vx:(Math.random()-0.5)*2,
-			vy:(Math.random())*2,
-			vz:(Math.random()-0.5)*2,
-			life:12, // shorter life
-			mesh
-		});
-	}
+for(let i=0;i<22;i++){
+particles.push({
+x:0,
+y:0,
+z:0,
+vx:(Math.random()-0.5)*2,
+vy:(Math.random())*2,
+vz:(Math.random()-0.5)*2,
+life:45
+});
+}
 }
 
 // ================= ANIMATION =================
@@ -947,33 +599,29 @@ requestAnimationFrame(animate);
 coin.rotation.z += 0.005;
 coin.position.y = Math.sin(Date.now()*0.002)*0.04;
 
-		// particles update
-		for(let i=particles.length-1;i>=0;i--){
-			const p = particles[i];
+// particles update
+for(let i=particles.length-1;i>=0;i--){
+const p=particles[i];
 
-			p.x += p.vx;
-			p.y += p.vy;
-			p.z += p.vz;
+p.x += p.vx;
+p.y += p.vy;
+p.z += p.vz;
 
-			p.vy -= 0.03;
-			p.life--;
+p.vy -= 0.03;
+p.life--;
 
-			// update existing mesh position
-			if(p.mesh){
-				p.mesh.position.set(p.x, p.y, p.z);
-			}
+const dot = new THREE.Mesh(
+new THREE.SphereGeometry(0.06,6,6),
+new THREE.MeshBasicMaterial({color:0xffd36b})
+);
 
-			if(p.life<=0){
-				try{
-					if(p.mesh){
-						scene.remove(p.mesh);
-						if(p.mesh.geometry) p.mesh.geometry.dispose();
-						if(p.mesh.material) p.mesh.material.dispose();
-					}
-				}catch(e){}
-				particles.splice(i,1);
-			}
-		}
+dot.position.set(p.x,p.y,p.z);
+scene.add(dot);
+
+setTimeout(()=>scene.remove(dot),110);
+
+if(p.life<=0) particles.splice(i,1);
+}
 
 renderer.render(scene,camera);
 }
@@ -986,7 +634,7 @@ function enhanceUI(){
 	if(document.getElementById('__enhanced_ui_css')) return;
 	const css = `
 	:root{ --accent1: #ffcc33; --accent2: #ff6b6b; --bg: #0f1724; --btn-text: #0b1020; }
-	.glow-btn{ display:inline-block; padding:8px 12px; border-radius:10px; color:var(--btn-text); font-weight:700; cursor:pointer; border:none; background:linear-gradient(135deg,var(--accent1),var(--accent2)); box-shadow:0 8px 24px rgba(255,107,107,0.14), 0 2px 6px rgba(0,0,0,0.5); transition:transform .18s ease, box-shadow .18s ease, filter .18s ease, opacity .18s ease; }
+	.glow-btn{ display:inline-block; padding:8px 12px; border-radius:10px; color:var(--btn-text); font-weight:700; cursor:pointer; border:none; background:linear-gradient(135deg,var(--accent1),var(--accent2)); box-shadow:0 8px 24px rgba(255,107,107,0.14), 0 2px 6px rgba(0,0,0,0.5); transition:transform .18s ease, box-shadow .18s ease; }
 	.glow-btn:hover{ transform:translateY(-4px) scale(1.02); box-shadow:0 14px 32px rgba(255,107,107,0.18),0 4px 10px rgba(0,0,0,0.5); }
 	.glow-btn:active{ transform:translateY(-1px) scale(0.995); }
 	@keyframes floatY{ 0%{transform:translateY(0)}50%{transform:translateY(-6px)}100%{transform:translateY(0)} }
@@ -995,10 +643,6 @@ function enhanceUI(){
 	@keyframes pulseGlow{ 0%{ box-shadow:0 6px 18px rgba(255,204,51,0.12);}50%{ box-shadow:0 18px 36px rgba(255,107,107,0.18);}100%{ box-shadow:0 6px 18px rgba(255,204,51,0.12);} }
 	#energyTimer{ font-weight:700; background:linear-gradient(90deg, rgba(255,107,107,0.08), rgba(255,204,51,0.06)); padding:6px 8px; border-radius:8px; display:inline-block; color:#fff; box-shadow:0 6px 20px rgba(0,0,0,0.4); }
 	#energy{ color: #ffe082; font-weight:800; text-shadow:0 2px 8px rgba(0,0,0,0.6); }
-	/* affordability states */
-	.affordable{ filter: saturate(1.2) drop-shadow(0 6px 20px rgba(255,204,51,0.18)); background:linear-gradient(135deg,#ffd84d,#ffb84d) !important; color:#0b0b00 !important; }
-	.unaffordable{ filter: grayscale(1) opacity(.55); cursor:not-allowed; }
-	.price-tag{ font-weight:800; color:#fff3c6; }
 	`;
 	const s = document.createElement('style');
 	s.id = '__enhanced_ui_css';
@@ -1010,34 +654,6 @@ function enhanceUI(){
 	ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.add('glow-btn'); });
 	const timer = document.getElementById('energyTimer'); if(timer) timer.classList.add('pulse');
 }
-// add a small debug control for testing DB saves
-function addDebugControls(){
-	if(document.getElementById('__db_test_btn')) return;
-	const btn = document.createElement('button');
-	btn.id = '__db_test_btn';
-	btn.innerText = 'Test DB Save';
-	btn.style.position = 'fixed';
-	btn.style.right = '12px';
-	btn.style.bottom = '84px';
-	btn.style.zIndex = 9999999;
-	btn.style.padding = '8px 12px';
-	btn.style.borderRadius = '8px';
-	btn.style.background = '#ffd54d';
-	btn.style.border = 'none';
-	btn.style.cursor = 'pointer';
-	btn.onclick = async ()=>{
-		try{
-			showSaveBanner('Testing DB save...', false);
-				try{ updateSaveStats({ state: 'saving' }); }catch(e){}
-				await saveOnline(true);
-			showSaveBanner('Test save completed. Check DB dashboard.', false);
-		}catch(e){
-			showSaveBanner('Test save failed: ' + (e && e.message ? e.message : String(e)), true);
-			updateDebugPanel('Test save error: ' + String(e));
-		}
-	};
-	document.body.appendChild(btn);
-}
 function attachHandlers(){
 	const el = document.getElementById("coin3d");
 	if(el){
@@ -1047,9 +663,6 @@ function attachHandlers(){
 
 				coins += power;
 				energy--;
-
-				// mark changed
-				markModified();
 
 				if(energy < maxEnergy && !energyTimerEnd){
 					energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
@@ -1067,17 +680,13 @@ function attachHandlers(){
 
 				render();
 
-				// persist locally immediately (use original setter) so refresh has latest while we sync to server
-				setLocalItem('coins', String(coins));
-				setLocalItem('energy', String(energy));
-				setLocalItem('energyTimerEnd', String(energyTimerEnd));
-				markModified();
-				// store a short-lived snapshot to prefer over server row if it's very recent
-				try{ setLocalSnapshot({ coins, energy, powerLv, maxEnergy, lastModified: new Date(lastModified).toISOString() }); }catch(e){}
+				// persist locally immediately so refresh has latest while we sync to server
+				localStorage.setItem('coins', String(coins));
+				localStorage.setItem('energy', String(energy));
+				localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 
-				// trigger immediate save to persist this click to DB
-				try{ updateSaveStats({ state: 'saving' }); }catch(e){}
-				await saveOnline(true);
+				// save to server (await so order is preserved)
+				await saveOnline();
 			}catch(err){
 				console.error('coin click handler error', err);
 				updateDebugPanel('coin click handler error: ' + String(err));
@@ -1109,66 +718,19 @@ if (error) {
 
 if (!data) {
   console.log("user not found → creating...");
-	await saveOnline(true);
+  await saveOnline();
   return;
 }
 
-		// Reconcile server data with any recent local snapshot to avoid losing recent local actions
-		try{
-			const localSnap = getLocalSnapshot();
-			if(localSnap && localSnap.ts && (Date.now() - localSnap.ts) < 10 * 1000){
-				// if snapshot is newer than server last_modified, apply snapshot locally and push to server
-				const serverTs = data && data.last_modified ? Date.parse(data.last_modified) : 0;
-				if(localSnap.lastModified && Date.parse(localSnap.lastModified) > serverTs){
-					console.log('loadOnline: applying recent local snapshot (newer than server)');
-					_applyingLocalSnapshot = true;
-					try{
-						coins = Number(localSnap.coins) || coins;
-						energy = Number(localSnap.energy) || energy;
-						powerLv = Number(localSnap.powerLv) || powerLv;
-						maxEnergy = Number(localSnap.maxEnergy) || maxEnergy;
-						// push snapshot to server to reconcile
-						try{ await saveOnline(true); }catch(e){ updateDebugPanel('save after applying snapshot failed: '+String(e)); }
-					}catch(e){ console.warn('apply local snapshot failed', e); }
-					_applyingLocalSnapshot = false;
-				} else {
-					// snapshot exists but server is newer — accept server
-					coins = data.coins ?? 0;
-					energy = data.energy ?? 100;
-					powerLv = data.power ?? 1;
-					maxEnergy = data.max_energy ?? 100;
-				}
-			} else {
-				// no recent snapshot — accept server as authoritative
-				coins = data.coins ?? 0;
-				energy = data.energy ?? 100;
-				powerLv = data.power ?? 1;
-				maxEnergy = data.max_energy ?? 100;
-			}
-		}catch(e){
-			console.warn('reconcile snapshot error', e);
-			coins = data.coins ?? 0;
-			energy = data.energy ?? 100;
-			powerLv = data.power ?? 1;
-			maxEnergy = data.max_energy ?? 100;
-		}
+    coins = data.coins ?? 0;
+    energy = data.energy ?? 100;
 
-		powerLv = data.power ?? 1;
+    powerLv = data.power ?? 1;
+    energyLv = data.energy_lv ?? 1;
+    mineLv = data.mine_lv ?? 1;
+    chargeLv = data.charge_lv ?? 1;
 
-		energyLv = data.energy_lv ?? 1;
-		mineLv = data.mine_lv ?? 1;
-		chargeLv = data.charge_lv ?? 1;
-
-		maxEnergy = data.max_energy ?? 100;
-		// restore server timer if present
-		if(data && data.energy_timer_end){
-			const parsed = Date.parse(data.energy_timer_end);
-			if(!isNaN(parsed)) energyTimerEnd = parsed;
-		}
-		// set lastModified from server if available
-		const serverModified = data && data.last_modified ? Date.parse(data.last_modified) : Date.now();
-		lastModified = serverModified || Date.now();
-		try{ localStorage.setItem('lastModified', String(lastModified)); }catch(e){}
+    maxEnergy = data.max_energy ?? 100;
 		// restore or compute a proper energyTimerEnd so countdown continues across refreshes and while offline
 		try{
 			const now = Date.now();
@@ -1202,7 +764,7 @@ if (!data) {
 							energy = Math.min(maxEnergy, energy + totalGain);
 							localStorage.setItem('energy', String(energy));
 							updateDebugPanel('Applied offline gain from last_grant: +' + totalGain + ' energy');
-							try{ await saveOnline(true); }catch(e){ updateDebugPanel('save after offline apply failed: ' + String(e)); }
+							try{ await saveOnline(); }catch(e){ updateDebugPanel('save after offline apply failed: ' + String(e)); }
 						}
 						// next scheduled grant time after last_grant
 						energyTimerEnd = last + (intervalsPassed + 1) * intervalMs;
@@ -1213,19 +775,19 @@ if (!data) {
 					// 3) fallback: if nothing stored and no server info, start a timer now
 					energyTimerEnd = now + ENERGY_INTERVAL * 1000;
 					localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-					try{ saveOnline(true); }catch(e){}
+					try{ saveOnline(); }catch(e){}
 				}
 			}
 		}catch(ex){ console.warn('energyTimer restore failed', ex); }
 
 	// persist loaded values locally so reloads show same state immediately
-setLocalItem('coins', String(coins));
-setLocalItem('energy', String(energy));
-setLocalItem('powerLv', String(powerLv));
-setLocalItem('energyLv', String(energyLv));
-setLocalItem('mineLv', String(mineLv));
-setLocalItem('chargeLv', String(chargeLv));
-setLocalItem('maxEnergy', String(maxEnergy));
+	localStorage.setItem('coins', String(coins));
+	localStorage.setItem('energy', String(energy));
+	localStorage.setItem('powerLv', String(powerLv));
+	localStorage.setItem('energyLv', String(energyLv));
+	localStorage.setItem('mineLv', String(mineLv));
+	localStorage.setItem('chargeLv', String(chargeLv));
+	localStorage.setItem('maxEnergy', String(maxEnergy));
 
 recalcDerived();
 
@@ -1256,7 +818,7 @@ render();
 try{ attachHandlers(); }catch(e){}
 
 // try to save once after load to ensure DB row exists
-try{ await saveOnline(true); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
+try{ await saveOnline(); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
 
 updateEnergyTimer();
 
