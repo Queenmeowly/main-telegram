@@ -634,6 +634,7 @@ if (!data) {
     chargeLv = data.charge_lv ?? 1;
 
     maxEnergy = data.max_energy ?? 100;
+	energyTimerEnd = Number(data.energy_timer_end) || 0;
 		// restore or compute a proper energyTimerEnd so countdown continues across refreshes and while offline
 		try{
 			const now = Date.now();
