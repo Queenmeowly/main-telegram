@@ -210,6 +210,8 @@ if (
 async function saveOnline(){
 	if(_saveInProgress){ _savePending = true; return; }
 	_saveInProgress = true;
+	// reflect UI state
+	updateSaveStats({ state: 'saving' });
 	try{
 const minimalPayload = {
 	// try to use numeric id when possible so DB equality matches numeric columns
@@ -411,7 +413,10 @@ maxEnergy = row.max_energy ?? maxEnergy;
 				try{ setLocalSnapshot({ coins, energy, powerLv, maxEnergy, lastModified: row.last_modified || new Date().toISOString() }); }catch(e){}
 				// successful save — clear pending last_grant
 				_pendingLastGrant = null;
-				try{ showSaveBanner('Saved to DB', false); }catch(e){}
+				try{ 
+					updateSaveStats({ state: 'saved', ts: Date.now(), coins: coins, energy: energy });
+					showSaveBanner('Saved to DB', false); 
+				}catch(e){}
 			}
 		}
 
@@ -423,7 +428,10 @@ maxEnergy = row.max_energy ?? maxEnergy;
 
 	}catch(err){
 		console.error('saveOnline unexpected error', err);
-		try{ showSaveBanner('Save failed: ' + (err && err.message ? err.message : String(err)), true); }catch(e){}
+		try{ 
+			updateSaveStats({ state: 'error', message: (err && err.message) ? err.message : String(err) });
+			showSaveBanner('Save failed: ' + (err && err.message ? err.message : String(err)), true);
+		}catch(e){}
 	}finally{
 		_saveInProgress = false;
 		if(_savePending){ _savePending = false; setTimeout(()=>saveOnline(), 50); }
@@ -458,6 +466,62 @@ function showSaveBanner(msg, isError){
 		clearTimeout(b.__hideTimer);
 		b.__hideTimer = setTimeout(()=>{ try{ b.style.opacity='0'; }catch(e){} }, 3500);
 	}catch(e){ console.warn('showSaveBanner failed', e); }
+}
+
+// Save Stats Panel: a small UI to show latest save status and values
+function ensureSaveStatsPanel(){
+	if(document.getElementById('saveStatsPanel')) return;
+	const p = document.createElement('div');
+	p.id = 'saveStatsPanel';
+	p.style.position = 'fixed';
+	p.style.right = '12px';
+	p.style.bottom = '12px';
+	p.style.zIndex = 999999;
+	p.style.padding = '8px 12px';
+	p.style.borderRadius = '8px';
+	p.style.background = 'rgba(0,0,0,0.55)';
+	p.style.color = '#fff';
+	p.style.fontSize = '13px';
+	p.style.minWidth = '180px';
+	p.style.boxShadow = '0 8px 20px rgba(0,0,0,0.45)';
+
+	p.innerHTML = '<div style="font-weight:700;margin-bottom:6px;">Save Stats</div>' +
+				  '<div id="saveStatsState">Idle</div>' +
+				  '<div id="saveStatsWhen" style="opacity:0.85;font-size:12px;margin-top:6px"></div>' +
+				  '<div id="saveStatsVals" style="opacity:0.9;font-size:12px;margin-top:6px"></div>';
+
+	document.body.appendChild(p);
+}
+
+function updateSaveStats(obj){
+	try{
+		ensureSaveStatsPanel();
+		const s = document.getElementById('saveStatsState');
+		const w = document.getElementById('saveStatsWhen');
+		const v = document.getElementById('saveStatsVals');
+		if(!s || !w || !v) return;
+		if(obj.state === 'saving'){
+			s.innerText = 'Saving...';
+			s.style.color = '#ffd166';
+			w.innerText = '';
+			v.innerText = '';
+		} else if(obj.state === 'saved'){
+			s.innerText = 'Saved';
+			s.style.color = '#8ef27a';
+			w.innerText = 'at ' + (obj.ts ? new Date(obj.ts).toLocaleString() : new Date().toLocaleString());
+			v.innerText = `coins: ${obj.coins ?? coins}, energy: ${obj.energy ?? energy}`;
+		} else if(obj.state === 'error'){
+			s.innerText = 'Save Error';
+			s.style.color = '#ff8a80';
+			w.innerText = obj.message ? obj.message : '';
+			v.innerText = '';
+		} else {
+			s.innerText = 'Idle';
+			s.style.color = '#ffffff';
+			w.innerText = '';
+			v.innerText = '';
+		}
+	}catch(e){ console.warn('updateSaveStats failed', e); }
 }
 
 // Autosave frequently so Telegram WebApp usage persists moment-to-moment
@@ -594,6 +658,8 @@ function attachUpgradeButtons(){
 	const upMine = document.getElementById('upMine'); if(upMine) upMine.onclick = ()=> tryUpgrade('mine');
 	const upCharge = document.getElementById('upCharge'); if(upCharge) upCharge.onclick = ()=> tryUpgrade('charge');
 	updateUpgradeUI();
+	// ensure save stats UI exists
+	try{ ensureSaveStatsPanel(); }catch(e){ console.warn('ensureSaveStatsPanel init failed', e); }
 
 	// compact top menu: hamburger slides left, top buttons appear
 	const menuBtn = document.getElementById('menuBtn');
