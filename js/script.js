@@ -131,13 +131,15 @@ telegram_id: USER,			coins,
 		});
 		updateDebugPanel('SAVE DATA: coins=' + String(coins) + ' energy=' + String(energy) + ' power=' + String(powerLv));
 
-		const minimalPayload = {
+const minimalPayload = {
 telegram_id: USER,
-			coins: Number(coins),
-			energy: Number(energy),
-			power: Number(powerLv),
-			max_energy: Number(maxEnergy)
-		};
+coins: Number(coins),
+energy: Number(energy),
+power: Number(powerLv),
+max_energy: Number(maxEnergy),
+
+energy_timer_end: Number(energyTimerEnd) || 0
+};
 
 		// use array form and request representation so we get the saved row back
 		const { data, error, status } = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
