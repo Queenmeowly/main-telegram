@@ -231,8 +231,9 @@ function updateUpgradeUI(){
 
 function recalcDerived(){
 	power = powerLv; // simple: 1 coin per power level
-	maxEnergy = 100 + (energyLv-1)*10;
-	// amount of energy granted each interval equals energy level
+	// maxEnergy should depend only on `chargeLv` (charge upgrades increase capacity)
+	maxEnergy = 100 + (chargeLv-1)*10;
+	// amount of energy granted each interval equals energy level (energy upgrades increase gain)
 	energyGain = energyLv;
 }
 
@@ -349,15 +350,31 @@ function updateEnergyTimer(){
 	}
 
 	// if energy is below max and there's no active timer, restore from storage or start a new one
-	if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
-		const stored = Number(localStorage.getItem('energyTimerEnd')) || 0;
-		if(stored && stored > now){
-			energyTimerEnd = stored;
-		} else {
-			energyTimerEnd = now + ENERGY_INTERVAL * 1000;
-			localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
-		}
+if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
+
+	const stored =
+		parseInt(localStorage.getItem("energyTimerEnd")) || 0;
+
+	if(stored){
+
+		energyTimerEnd = stored;
+
+	}else{
+
+		const passed =
+			parseInt(localStorage.getItem("energyPassed")) || 0;
+
+		energyTimerEnd =
+			Date.now() + Math.max(0,
+			(ENERGY_INTERVAL - passed)) * 1000;
+
+		localStorage.setItem(
+			"energyTimerEnd",
+			String(energyTimerEnd)
+		);
+
 	}
+}
 
 	// only grant when a timer is active and it has reached 0
 	if(energyTimerEnd && energyTimerEnd <= now){
