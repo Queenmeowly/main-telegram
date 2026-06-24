@@ -231,9 +231,8 @@ function updateUpgradeUI(){
 
 function recalcDerived(){
 	power = powerLv; // simple: 1 coin per power level
-	// maxEnergy should depend only on `chargeLv` (charge upgrades increase capacity)
-	maxEnergy = 100 + (chargeLv-1)*10;
-	// amount of energy granted each interval equals energy level (energy upgrades increase gain)
+	maxEnergy = 100 + (energyLv-1)*10;
+	// amount of energy granted each interval equals energy level
 	energyGain = energyLv;
 }
 
