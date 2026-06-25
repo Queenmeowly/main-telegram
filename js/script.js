@@ -81,36 +81,10 @@ const particles = [];
 let _saveInProgress = false;
 let _savePending = false;
 
-// Debug/status panel for environments without a console (Telegram WebView)
-function ensureDebugPanel(){
-	if(document.getElementById('saveStatus')) return;
-	const d = document.createElement('div');
-	d.id = 'saveStatus';
-	d.style.position = 'fixed';
-	d.style.right = '12px';
-	d.style.bottom = '12px';
-	d.style.zIndex = 99999;
-	d.style.background = 'rgba(0,0,0,0.6)';
-	d.style.color = 'white';
-	d.style.fontSize = '12px';
-	d.style.padding = '8px 10px';
-	d.style.borderRadius = '8px';
-	d.style.maxWidth = '320px';
-	d.style.boxShadow = '0 6px 20px rgba(0,0,0,0.6)';
-	d.innerHTML = '<b>Save status</b><div id="saveStatusBody" style="margin-top:6px;white-space:pre-wrap;overflow:auto;max-height:180px;"></div>';
-	document.body.appendChild(d);
-}
+// Debug panel disabled
+function ensureDebugPanel(){}
 
-function updateDebugPanel(msg){
-	try{
-		ensureDebugPanel();
-		const el = document.getElementById('saveStatusBody');
-		const time = new Date().toLocaleTimeString();
-		el.innerText = `[${time}] ${msg}\n` + el.innerText;
-	}catch(e){
-		// ignore
-	}
-}
+function updateDebugPanel(msg){}
 
 // ================= SAVE =================
 async function saveOnline(){
