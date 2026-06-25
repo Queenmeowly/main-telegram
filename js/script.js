@@ -66,12 +66,21 @@ let energy = Number(localStorage.getItem('energy')) || 100;
 
 let powerLv = Number(localStorage.getItem('powerLv')) || 1;
 let energyLv = Number(localStorage.getItem('energyLv')) || 1;
-let mineLv = Number(localStorage.getItem('mineLv')) || 1;
+let mineLv = Number(localStorage.getItem('mineLv'));
+
+if(isNaN(mineLv))
+mineLv = 0;
 let chargeLv = Number(localStorage.getItem('chargeLv')) || 1;
 
 let maxEnergy = Number(localStorage.getItem('maxEnergy')) || 100;
 
 let energyTimerEnd = Number(localStorage.getItem('energyTimerEnd')) || 0;
+let mineTimerEnd =
+Number(
+localStorage.getItem(
+'mineTimerEnd'
+)
+) || 0;
 const ENERGY_INTERVAL = 30 * 60; // seconds (default 30 minutes)
 
 let energyGain = energyLv;
@@ -118,7 +127,11 @@ charge_lv: Number(chargeLv),
 
 max_energy: Number(maxEnergy),
 
-energy_timer_end: Number(energyTimerEnd) || 0
+energy_timer_end:
+Number(energyTimerEnd)||0,
+
+mine_timer_end:
+Number(mineTimerEnd)||0
 };;
 
 		// use array form and request representation so we get the saved row back
@@ -405,7 +418,79 @@ function updateEnergyTimer(){
 		localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 		return;
 	}
+function updateMineTimer(){
 
+	const now = Date.now();
+
+	if(mineLv <= 0){
+		mineTimerEnd = 0;
+		localStorage.setItem(
+			"mineTimerEnd",
+			"0"
+		);
+		return;
+	}
+
+	if(!mineTimerEnd){
+
+		mineTimerEnd =
+		now +
+		ENERGY_INTERVAL*1000;
+
+		localStorage.setItem(
+			"mineTimerEnd",
+			String(
+				mineTimerEnd
+			)
+		);
+
+	}
+
+	if(now >= mineTimerEnd){
+
+		const interval =
+		ENERGY_INTERVAL*1000;
+
+		const passed =
+		1+
+		Math.floor(
+			(
+				now-
+				mineTimerEnd
+			)/interval
+		);
+
+		const reward =
+		passed*
+		mineLv;
+
+		coins += reward;
+
+		mineTimerEnd +=
+		passed*
+		interval;
+
+		localStorage.setItem(
+			"coins",
+			String(coins)
+		);
+
+		localStorage.setItem(
+			"mineTimerEnd",
+			String(
+				mineTimerEnd
+			)
+		);
+
+		render();
+
+		updateUpgradeUI();
+
+		saveOnline();
+
+	}
+
+}
 	// if energy is below max and there's no active timer, restore from storage or start a new one
 // if energy is below max and there's no active timer, restore from storage or start a new one
 if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
@@ -468,6 +553,12 @@ if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
 // start periodic update every second
 setInterval(updateEnergyTimer, 1000);
 updateEnergyTimer();
+setInterval(
+updateMineTimer,
+1000
+);
+
+updateMineTimer();
 
 // NOTE: remove immediate startup fallback here — timer should be derived from stored value or server
 // (we set/restore `energyTimerEnd` inside `loadOnline()` to preserve continuity across refreshes).
@@ -685,7 +776,16 @@ if (!data) {
 
     powerLv = data.power ?? 1;
     energyLv = data.energy_lv ?? 1;
-    mineLv = data.mine_lv ?? 1;
+    mineLv = data.mine_lv ?? 0;
+	mineTimerEnd =
+Number(
+data.mine_timer_end
+)||0;
+
+localStorage.setItem(
+'mineTimerEnd',
+mineTimerEnd
+);
     chargeLv = data.charge_lv ?? 1;
 
     maxEnergy = data.max_energy ?? 100;
