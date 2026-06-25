@@ -152,17 +152,29 @@ energy_timer_end: Number(energyTimerEnd) || 0
 			updateDebugPanel('saved (upsert) — telegram_id: ' + String(USER) + '\n' + JSON.stringify(data));
 			Telegram.WebApp && Telegram.WebApp.HapticFeedback && Telegram.WebApp.HapticFeedback.notificationOccurred && Telegram.WebApp.HapticFeedback.notificationOccurred("success");
 			// if server returned the saved row, sync it to localStorage to keep refresh stable
-			if(Array.isArray(data) && data[0]){
-				const row = data[0];
-				coins = row.coins ?? coins;
-				energy = row.energy ?? energy;
-				powerLv = row.power ?? powerLv;
-				maxEnergy = row.max_energy ?? maxEnergy;
-				localStorage.setItem('coins', String(coins));
-				localStorage.setItem('energy', String(energy));
-				localStorage.setItem('powerLv', String(powerLv));
-				localStorage.setItem('maxEnergy', String(maxEnergy));
-			}
+if(Array.isArray(data) && data[0]){
+	const row = data[0];
+
+	coins = row.coins ?? coins;
+	energy = row.energy ?? energy;
+
+	powerLv = row.power ?? powerLv;
+	energyLv = row.energy_lv ?? energyLv;
+	mineLv = row.mine_lv ?? mineLv;
+	chargeLv = row.charge_lv ?? chargeLv;
+
+	maxEnergy = row.max_energy ?? maxEnergy;
+
+	localStorage.setItem('coins', String(coins));
+	localStorage.setItem('energy', String(energy));
+
+	localStorage.setItem('powerLv', String(powerLv));
+	localStorage.setItem('energyLv', String(energyLv));
+	localStorage.setItem('mineLv', String(mineLv));
+	localStorage.setItem('chargeLv', String(chargeLv));
+
+	localStorage.setItem('maxEnergy', String(maxEnergy));
+}
 		}
 
 		// verify by selecting the row we just upserted and log it
