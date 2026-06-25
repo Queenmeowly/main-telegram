@@ -298,7 +298,7 @@ function updateUpgradeUI(){
 
 	});
 }
-
+let power = 1;
 function recalcDerived(){
 	power = powerLv; // simple: 1 coin per power level
 	// maxEnergy should depend only on `chargeLv` (charge upgrades increase capacity)
@@ -418,79 +418,7 @@ function updateEnergyTimer(){
 		localStorage.setItem('energyTimerEnd', String(energyTimerEnd));
 		return;
 	}
-function updateMineTimer(){
 
-	const now = Date.now();
-
-	if(mineLv <= 0){
-		mineTimerEnd = 0;
-		localStorage.setItem(
-			"mineTimerEnd",
-			"0"
-		);
-		return;
-	}
-
-	if(!mineTimerEnd){
-
-		mineTimerEnd =
-		now +
-		ENERGY_INTERVAL*1000;
-
-		localStorage.setItem(
-			"mineTimerEnd",
-			String(
-				mineTimerEnd
-			)
-		);
-
-	}
-
-	if(now >= mineTimerEnd){
-
-		const interval =
-		ENERGY_INTERVAL*1000;
-
-		const passed =
-		1+
-		Math.floor(
-			(
-				now-
-				mineTimerEnd
-			)/interval
-		);
-
-		const reward =
-		passed*
-		mineLv;
-
-		coins += reward;
-
-		mineTimerEnd +=
-		passed*
-		interval;
-
-		localStorage.setItem(
-			"coins",
-			String(coins)
-		);
-
-		localStorage.setItem(
-			"mineTimerEnd",
-			String(
-				mineTimerEnd
-			)
-		);
-
-		render();
-
-		updateUpgradeUI();
-
-		saveOnline();
-
-	}
-
-}
 	// if energy is below max and there's no active timer, restore from storage or start a new one
 // if energy is below max and there's no active timer, restore from storage or start a new one
 if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
@@ -553,6 +481,71 @@ if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
 // start periodic update every second
 setInterval(updateEnergyTimer, 1000);
 updateEnergyTimer();
+function updateMineTimer(){
+
+	const now = Date.now();
+
+	if(mineLv <= 0){
+		mineTimerEnd = 0;
+
+		localStorage.setItem(
+			"mineTimerEnd",
+			"0"
+		);
+
+		return;
+	}
+
+	if(!mineTimerEnd){
+
+		mineTimerEnd =
+			now +
+			ENERGY_INTERVAL * 1000;
+
+		localStorage.setItem(
+			"mineTimerEnd",
+			String(mineTimerEnd)
+		);
+	}
+
+	if(now >= mineTimerEnd){
+
+		const interval =
+			ENERGY_INTERVAL * 1000;
+
+		const passed =
+			1 +
+			Math.floor(
+				(now - mineTimerEnd) /
+				interval
+			);
+
+		const reward =
+			passed * mineLv;
+
+		coins += reward;
+
+		mineTimerEnd +=
+			passed *
+			interval;
+
+		localStorage.setItem(
+			"coins",
+			String(coins)
+		);
+
+		localStorage.setItem(
+			"mineTimerEnd",
+			String(mineTimerEnd)
+		);
+
+		render();
+
+		updateUpgradeUI();
+
+		saveOnline();
+	}
+}
 setInterval(
 updateMineTimer,
 1000
