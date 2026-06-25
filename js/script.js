@@ -211,16 +211,79 @@ function priceFor(kind, lvl){
 }
 
 function updateUpgradeUI(){
-	// levels
-	const p = document.getElementById("powerLv"); if(p) p.innerText = powerLv;
-	const e = document.getElementById("energyLv"); if(e) e.innerText = energyLv;
-	const m = document.getElementById("mineLv"); if(m) m.innerText = mineLv;
-	const c = document.getElementById("chargeLv"); if(c) c.innerText = chargeLv;
-	// prices
-	const pp = document.getElementById("powerPrice"); if(pp) pp.innerText = priceFor('power', powerLv);
-	const ep = document.getElementById("energyPrice"); if(ep) ep.innerText = priceFor('energy', energyLv);
-	const mp = document.getElementById("minePrice"); if(mp) mp.innerText = priceFor('mine', mineLv);
-	const cp = document.getElementById("chargePrice"); if(cp) cp.innerText = priceFor('charge', chargeLv);
+
+	const upgrades = [
+		{
+			lvl:"powerLv",
+			price:"powerPrice",
+			btn:"upPower",
+			level:powerLv,
+			type:"power"
+		},
+		{
+			lvl:"energyLv",
+			price:"energyPrice",
+			btn:"upEnergy",
+			level:energyLv,
+			type:"energy"
+		},
+		{
+			lvl:"mineLv",
+			price:"minePrice",
+			btn:"upMine",
+			level:mineLv,
+			type:"mine"
+		},
+		{
+			lvl:"chargeLv",
+			price:"chargePrice",
+			btn:"upCharge",
+			level:chargeLv,
+			type:"charge"
+		}
+	];
+
+	upgrades.forEach(item=>{
+
+		const levelEl =
+		document.getElementById(item.lvl);
+
+		const priceEl =
+		document.getElementById(item.price);
+
+		const btn =
+		document.getElementById(item.btn);
+
+		const cost =
+		priceFor(item.type,item.level);
+
+		if(levelEl)
+			levelEl.innerText =
+			item.level;
+
+		if(priceEl)
+			priceEl.innerText =
+			cost;
+
+		if(btn){
+
+			const canBuy =
+			coins >= cost;
+
+			btn.classList.toggle(
+				"can-buy",
+				canBuy
+			);
+
+			btn.classList.toggle(
+				"locked",
+				!canBuy
+			);
+
+			btn.disabled = false;
+		}
+
+	});
 }
 
 function recalcDerived(){
