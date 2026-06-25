@@ -107,13 +107,19 @@ telegram_id: USER,			coins,
 
 const minimalPayload = {
 telegram_id: USER,
+
 coins: Number(coins),
 energy: Number(energy),
+
 power: Number(powerLv),
+energy_lv: Number(energyLv),
+mine_lv: Number(mineLv),
+charge_lv: Number(chargeLv),
+
 max_energy: Number(maxEnergy),
 
 energy_timer_end: Number(energyTimerEnd) || 0
-};
+};;
 
 		// use array form and request representation so we get the saved row back
 		const { data, error, status } = await db.from('users').upsert([minimalPayload], { onConflict: 'telegram_id', returning: 'representation' });
