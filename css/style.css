@@ -91,8 +91,6 @@ overflow:hidden;
 }
 
 /* ensure buttons keep same visual square and don't overlap */
-.top-menu-items{gap:8px}
-
 /* ensure Leader Board not manually transformed (avoid overlap) */
 #menuLeader{transform:none}
 .top-menu-btn:hover{background:rgba(255,255,255,0.09)}
@@ -244,25 +242,57 @@ font-size:18px;
 }
 
 .card .title{
+
+margin-top:8px;
+
 font-size:11px;
-opacity:0.85;
+
+opacity:.85;
+
+text-align:center;
+
+width:100%;
+
 }
 
 .card .lvl{
+
+margin-top:2px;
+
+margin-bottom:6px;
+
 font-size:11px;
-opacity:0.75;
+
+opacity:.75;
+
+text-align:center;
+
+width:100%;
+
 }
 
 .btn{
+
 width:100%;
-margin-top:6px;
+
+margin-top:auto;
+
 padding:8px;
+
 border:none;
+
 border-radius:10px;
+
 cursor:pointer;
-color:white;
+
+color:#fff;
+
 background:linear-gradient(135deg,#7c3aed,#06b6d4);
+
 font-size:11px;
+
+text-align:center;
+
 }
 /* ===== قابلیت ها ===== */
 
@@ -277,6 +307,11 @@ user-select:none;
 
 .card{
 
+display:flex;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+
 background:
 linear-gradient(
 180deg,
@@ -285,6 +320,12 @@ rgba(255,255,255,.03)
 );
 
 border:1px solid rgba(255,255,255,.10);
+
+border-radius:14px;
+
+padding:10px;
+
+text-align:center;
 
 backdrop-filter:blur(18px);
 
