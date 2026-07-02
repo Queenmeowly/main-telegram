@@ -223,7 +223,13 @@ width:22px;
 
 text-align:center;
 
-filter:drop-shadow(0 0 8px rgba(255,255,255,.35));
+filter:none;
+
+background:none;
+
+box-shadow:none;
+
+border:none;
 
 }
 
