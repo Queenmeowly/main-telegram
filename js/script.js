@@ -85,6 +85,20 @@ const ENERGY_INTERVAL = 30 * 60; // seconds (default 30 minutes)
 
 let energyGain = energyLv;
 const particles = [];
+// ================= SOUNDS =================
+
+const clickSound = new Audio("sounds/click.mp3");
+clickSound.volume = 0.35;
+
+const upgradeSound = new Audio("sounds/upgrade.mp3");
+upgradeSound.volume = 0.45;
+
+function playSound(sound){
+    try{
+        sound.currentTime = 0;
+        sound.play();
+    }catch(e){}
+}
 
 // save control
 let _saveInProgress = false;
@@ -321,6 +335,7 @@ function tryUpgrade(kind){
 	if(coins < price) return false;
 
 	coins -= price;
+	playSound(upgradeSound);
 
 	if(kind==='power') powerLv++;
 	else if(kind==='energy') energyLv++;
@@ -705,6 +720,7 @@ function attachHandlers(){
 
 				coins += power;
 				energy--;
+				playSound(clickSound);
 
 				if(energy < maxEnergy && !energyTimerEnd){
 					energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
