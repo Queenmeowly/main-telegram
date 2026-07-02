@@ -284,9 +284,9 @@ margin-right:auto;
 
 width:100%;
 
-padding:8px;
+padding:6px 4px;
 
-margin-top:8px;
+margin-top:6px;
 
 border:none;
 
@@ -296,7 +296,7 @@ background:linear-gradient(135deg,#7c3aed,#06b6d4);
 
 color:#fff;
 
-font-size:11px;
+font-size:9px;
 
 font-weight:700;
 
@@ -310,9 +310,29 @@ justify-content:center;
 
 align-items:center;
 
-line-height:1.4;
+line-height:1.25;
 
 cursor:pointer;
+
+letter-spacing:.2px;
+
+text-transform:uppercase;
+
+opacity:.9;
+
+}
+
+.btn span{
+
+font-size:14px;
+
+font-weight:800;
+
+margin-top:2px;
+
+text-transform:none;
+
+letter-spacing:0;
 
 }
 /* ===== قابلیت ها ===== */
