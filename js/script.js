@@ -62,7 +62,8 @@ document.addEventListener("DOMContentLoaded", () => {
   updateDebugPanel("USER SET: " + USER);
 });
 let coins = Number(localStorage.getItem('coins')) || 0;
-let energy = Number(localStorage.getItem('energy')) || 100;
+let energy = Number(localStorage.getItem('energy'));
+if(isNaN(energy)) energy = 100;
 
 let powerLv = Number(localStorage.getItem('powerLv')) || 1;
 let energyLv = Number(localStorage.getItem('energyLv')) || 1;
