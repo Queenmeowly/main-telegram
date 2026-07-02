@@ -241,33 +241,17 @@ font-weight:600;
 font-size:18px;
 }
 
-.card .title{
-
-margin-top:8px;
-
-font-size:11px;
-
-opacity:.85;
-
-text-align:center;
-
-width:100%;
-
-}
-
+.card .title,
 .card .lvl{
 
-margin-top:2px;
-
-margin-bottom:6px;
-
-font-size:11px;
-
-opacity:.75;
+width:100%;
 
 text-align:center;
 
-width:100%;
+display:block;
+
+margin-left:auto;
+margin-right:auto;
 
 }
 
@@ -275,23 +259,35 @@ width:100%;
 
 width:100%;
 
-margin-top:auto;
-
 padding:8px;
+
+margin-top:8px;
 
 border:none;
 
 border-radius:10px;
 
-cursor:pointer;
+background:linear-gradient(135deg,#7c3aed,#06b6d4);
 
 color:#fff;
 
-background:linear-gradient(135deg,#7c3aed,#06b6d4);
-
 font-size:11px;
 
+font-weight:700;
+
 text-align:center;
+
+display:flex;
+
+flex-direction:column;
+
+justify-content:center;
+
+align-items:center;
+
+line-height:1.4;
+
+cursor:pointer;
 
 }
 /* ===== قابلیت ها ===== */
