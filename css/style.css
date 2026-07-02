@@ -265,6 +265,10 @@ font-size:13px;
 .card .title,
 .card .lvl{
 
+    font-size: 12px;
+
+    font-weight: 700;
+
 width:100%;
 
 text-align:center;
@@ -292,7 +296,7 @@ background:linear-gradient(135deg,#7c3aed,#06b6d4);
 
 color:#fff;
 
-font-size:11px;
+font-size:14px;
 
 font-weight:700;
 
