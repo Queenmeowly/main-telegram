@@ -74,10 +74,21 @@ transition:all .28s ease;
 .menu-list li:hover{background:rgba(255,255,255,0.03)}
 
 .top{position:relative;height:44px;display:flex;align-items:center;justify-content:flex-end;padding-left:8px}
-.top-menu-items{position:absolute;top:50%;right:12px;left:auto;display:flex;gap:8px;align-items:center;opacity:0;pointer-events:none;transform:translateY(-50%) translateX(6px);transition:all .28s ease;z-index:1800;padding-right:6px;white-space:nowrap;overflow:hidden}
-.top-menu-btn{background:rgba(255,255,255,0.06);border:none;color:#fff;padding:0 8px;border-radius:10px;cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:6px;height:44px;min-width:44px;box-sizing:border-box;flex-shrink:1}
-.top-menu-btn .icon{font-size:15px;opacity:0.95;display:inline-block;width:20px;text-align:center}
-.top-menu-btn .label{display:inline-block;white-space:nowrap;font-size:12px;max-width:84px;overflow:hidden;text-overflow:ellipsis}
+.top-menu-items{
+position:absolute;
+top:50%;
+left:60px;
+display:flex;
+align-items:center;
+gap:10px;
+opacity:0;
+pointer-events:none;
+transform:translateY(-50%);
+transition:.35s ease;
+z-index:2000;
+max-width:calc(100% - 70px);
+overflow:hidden;
+}
 
 /* ensure buttons keep same visual square and don't overlap */
 .top-menu-items{gap:8px}
@@ -96,12 +107,25 @@ transition:all .28s ease;
 	z-index:1700;
 }
 .menu-open .top-menu-items{
-	opacity:1;
-	pointer-events:auto;
-	right:auto;
-	left:50px; /* nudged slightly more left to prevent overflow */
-	transform:translateY(-50%) translateX(0);
-	z-index:2000;
+
+opacity:1;
+
+pointer-events:auto;
+
+left:58px;
+
+transform:translateY(-50%);
+
+display:flex;
+
+gap:6px;
+
+max-width:calc(100% - 70px);
+
+overflow:hidden;
+
+z-index:2000;
+
 }
 
 /* nudge only Leader Board a bit right when menu is open to balance spacing */
@@ -158,13 +182,61 @@ padding:8px;
 z-index:1000;
 }
 
-.card{
-background:rgba(255,255,255,0.06);
-border:1px solid rgba(255,255,255,0.08);
-border-radius:14px;
-padding:10px;
+.top-menu-btn{
+
+display:flex;
+align-items:center;
+justify-content:center;
+
+gap:6px;
+
+height:42px;
+
+padding:0 10px;
+
+border:none;
+border-radius:12px;
+
+background:rgba(255,255,255,.08);
+
+backdrop-filter:blur(18px);
+
+color:#fff;
+
+font-size:12px;
+font-weight:600;
+
+cursor:pointer;
+
+transition:.25s;
+
+box-shadow:0 8px 24px rgba(0,0,0,.35);
+
+flex-shrink:1;
+
+min-width:42px;
+
+}
+.top-menu-btn .icon{
+
+font-size:18px;
+
+width:22px;
+
 text-align:center;
-backdrop-filter: blur(10px);
+
+filter:drop-shadow(0 0 8px rgba(255,255,255,.35));
+
+}
+
+.top-menu-btn .label{
+
+white-space:nowrap;
+
+font-size:12px;
+
+font-weight:600;
+
 }
 
 .card .icon{
