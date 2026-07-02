@@ -232,6 +232,21 @@ box-shadow:none;
 border:none;
 
 }
+.top-menu-btn{
+
+background:rgba(255,255,255,.08);
+
+}
+
+.top-menu-btn .icon{
+
+background:transparent !important;
+
+box-shadow:none !important;
+
+filter:none !important;
+
+}
 
 .top-menu-btn .label{
 
@@ -277,7 +292,7 @@ background:linear-gradient(135deg,#7c3aed,#06b6d4);
 
 color:#fff;
 
-font-size:11px;
+font-size:7px;
 
 font-weight:700;
 
