@@ -661,7 +661,7 @@ scene.add(coin);
 
 // ================= PARTICLES =================
 function spawnParticles(){
-for(let i=0;i<22;i++){
+for(let i=0;i<6;i++){
 particles.push({
 x:0,
 y:0,
