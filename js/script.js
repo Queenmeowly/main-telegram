@@ -889,7 +889,7 @@ render();
 try{ attachHandlers(); }catch(e){}
 
 // try to save once after load to ensure DB row exists
-try{ await saveOnline(); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
+// try{ await saveOnline(); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
 
 updateEnergyTimer();
 
