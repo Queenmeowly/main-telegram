@@ -675,6 +675,7 @@ return new THREE.CanvasTexture(c);
 }
 
 // ================= COIN (FIXED THICKNESS) =================
+console.log("CREATING 3D COIN...");
 const coin = new THREE.Mesh(
 new THREE.CylinderGeometry(2.7,2.7,0.45,180), // 🔥 نازک‌تر شد
 new THREE.MeshStandardMaterial({
