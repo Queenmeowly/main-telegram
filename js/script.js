@@ -75,13 +75,15 @@ let chargeLv = Number(localStorage.getItem('chargeLv')) || 1;
 let maxEnergy = Number(localStorage.getItem('maxEnergy')) || 100;
 
 let energyTimerEnd = Number(localStorage.getItem('energyTimerEnd')) || 0;
+let mineUnclaimed =
+Number(localStorage.getItem("mineUnclaimed")) || 0;
 let mineTimerEnd =
 Number(
 localStorage.getItem(
 'mineTimerEnd'
 )
 ) || 0;
-const ENERGY_INTERVAL = 10; // seconds (default 30 minutes)
+const ENERGY_INTERVAL = 10; // seconds (default 30 * 60 minutes) زمان بازی تایمر
 
 let energyGain = energyLv;
 const particles = [];
@@ -131,7 +133,13 @@ energy_timer_end:
 Number(energyTimerEnd)||0,
 
 mine_timer_end:
-Number(mineTimerEnd)||0
+Number(mineTimerEnd)||0,
+
+mine_unclaimed:
+Number(mineUnclaimed)||0,
+
+last_online:
+Date.now()
 };;
 
 		// use array form and request representation so we get the saved row back
@@ -520,19 +528,19 @@ function updateMineTimer(){
 				interval
 			);
 
-		const reward =
-			passed * mineLv;
+const reward =
+passed * mineLv;
 
-		coins += reward;
+mineUnclaimed += reward;
 
 		mineTimerEnd +=
 			passed *
 			interval;
 
-		localStorage.setItem(
-			"coins",
-			String(coins)
-		);
+localStorage.setItem(
+"mineUnclaimed",
+String(mineUnclaimed)
+);
 
 		localStorage.setItem(
 			"mineTimerEnd",
@@ -774,10 +782,17 @@ if (!data) {
 Number(
 data.mine_timer_end
 )||0;
+mineUnclaimed =
+Number(data.mine_unclaimed)||0;
+
+localStorage.setItem(
+"mineUnclaimed",
+String(mineUnclaimed)
+);
 
 localStorage.setItem(
 'mineTimerEnd',
-mineTimerEnd
+String(mineTimerEnd)
 );
     chargeLv = data.charge_lv ?? 1;
 
@@ -822,6 +837,7 @@ updateUpgradeUI();
 updateEnergyTimer();
 		updateDebugPanel('loadOnline() - USER: ' + String(USER));
 console.log("DATA LOADED:", data);
+showOfflineReward();
 
   }catch(e){
     console.log("load crash", e);
@@ -854,4 +870,55 @@ window.addEventListener('error', (ev)=>{
 });
 window.addEventListener('unhandledrejection', (ev)=>{
 	try{ updateDebugPanel('Unhandled rejection: '+ String(ev && ev.reason ? ev.reason : ev)); }catch(e){}
+});
+function showOfflineReward(){
+
+const popup = document.getElementById("offlinePopup");
+const amount = document.getElementById("offlineCoins");
+
+if(mineUnclaimed > 0){
+
+amount.innerText = mineUnclaimed;
+
+popup.classList.add("show");
+
+}
+
+}
+
+
+document.addEventListener("DOMContentLoaded",()=>{
+
+const btn = document.getElementById("claimOffline");
+
+if(btn){
+
+btn.onclick = async()=>{
+
+coins += mineUnclaimed;
+
+mineUnclaimed = 0;
+
+localStorage.setItem(
+"coins",
+String(coins)
+);
+
+localStorage.setItem(
+"mineUnclaimed",
+"0"
+);
+
+render();
+
+await saveOnline();
+
+document
+.getElementById("offlinePopup")
+.classList.remove("show");
+
+};
+
+}
+
 });
