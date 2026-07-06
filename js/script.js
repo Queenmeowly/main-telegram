@@ -81,7 +81,7 @@ localStorage.getItem(
 'mineTimerEnd'
 )
 ) || 0;
-const ENERGY_INTERVAL = 30 * 60; // seconds (default 30 minutes)
+const ENERGY_INTERVAL = 10; // seconds (default 30 minutes)
 
 let energyGain = energyLv;
 const particles = [];
