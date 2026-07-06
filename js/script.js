@@ -85,6 +85,10 @@ localStorage.getItem(
 const ENERGY_INTERVAL = 30 * 60; // seconds (default 30 minutes)
 
 let energyGain = energyLv;
+const MAX_MINE_HOURS = 10;
+const MAX_MINE_SECONDS = MAX_MINE_HOURS * 60 * 60;
+
+let pendingMineCoins = 0;
 const particles = [];
 // ================= SOUNDS =================
 
@@ -535,68 +539,57 @@ setInterval(updateEnergyTimer, 1000);
 updateEnergyTimer();
 function updateMineTimer(){
 
-	const now = Date.now();
+    const now = Date.now();
 
-	if(mineLv <= 0){
-		mineTimerEnd = 0;
+    if(mineLv <= 0){
+        mineTimerEnd = 0;
+        pendingMineCoins = 0;
 
-		localStorage.setItem(
-			"mineTimerEnd",
-			"0"
-		);
+        localStorage.setItem("mineTimerEnd","0");
+        return;
+    }
 
-		return;
-	}
+    if(!mineTimerEnd){
 
-	if(!mineTimerEnd){
+        mineTimerEnd = now;
+        localStorage.setItem(
+            "mineTimerEnd",
+            String(mineTimerEnd)
+        );
 
-		mineTimerEnd =
-			now +
-			ENERGY_INTERVAL * 1000;
+        return;
+    }
 
-		localStorage.setItem(
-			"mineTimerEnd",
-			String(mineTimerEnd)
-		);
-	}
+    const passedSeconds =
+        Math.floor(
+            (now - mineTimerEnd) / 1000
+        );
 
-	if(now >= mineTimerEnd){
+    if(passedSeconds < ENERGY_INTERVAL)
+        return;
 
-		const interval =
-			ENERGY_INTERVAL * 1000;
+    const limitedSeconds =
+        Math.min(
+            passedSeconds,
+            MAX_MINE_SECONDS
+        );
 
-		const passed =
-			1 +
-			Math.floor(
-				(now - mineTimerEnd) /
-				interval
-			);
+    const cycles =
+        Math.floor(
+            limitedSeconds /
+            ENERGY_INTERVAL
+        );
 
-		const reward =
-			passed * mineLv;
+    if(cycles <= 0)
+        return;
 
-		coins += reward;
+    pendingMineCoins =
+        cycles * mineLv;
 
-		mineTimerEnd +=
-			passed *
-			interval;
-
-		localStorage.setItem(
-			"coins",
-			String(coins)
-		);
-
-		localStorage.setItem(
-			"mineTimerEnd",
-			String(mineTimerEnd)
-		);
-
-		render();
-
-		updateUpgradeUI();
-
-		saveOnline();
-	}
+    showMinePopup(
+        pendingMineCoins,
+        cycles * energyLv
+    );
 }
 setInterval(
 updateMineTimer,
