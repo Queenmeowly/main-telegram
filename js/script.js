@@ -617,8 +617,13 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.6;
 console.log("COIN CONTAINER:", document.getElementById("coin3d"));
-document.getElementById("coin3d").appendChild(renderer.domElement);
+const coinContainer = document.getElementById("coin3d");
 
+if(coinContainer){
+    coinContainer.appendChild(renderer.domElement);
+}else{
+    console.error("coin3d not found");
+}
 // ================= LIGHTS =================
 scene.add(new THREE.AmbientLight(0xffffff, 5));
 
@@ -792,6 +797,7 @@ setInterval(render,1000);
 render();
 async function loadOnline(){
   try{
+	updateDebugPanel("LOAD ONLINE START");
 		console.log('loadOnline() - USER:', USER);
 
 		const { data, error } = await db
@@ -799,6 +805,7 @@ async function loadOnline(){
 	.select("*")
 .eq("telegram_id", USER)
 	.maybeSingle();
+	updateDebugPanel("SUPABASE RESULT: " + JSON.stringify(data));
 
 if (error) {
   console.log("load error:", error);
