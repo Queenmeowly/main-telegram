@@ -62,8 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateDebugPanel("USER SET: " + USER);
 });
 let coins = Number(localStorage.getItem('coins')) || 0;
-let energy = Number(localStorage.getItem('energy'));
-if(isNaN(energy)) energy = 100;
+let energy = Number(localStorage.getItem('energy')) || 100;
 
 let powerLv = Number(localStorage.getItem('powerLv')) || 1;
 let energyLv = Number(localStorage.getItem('energyLv')) || 1;
@@ -85,69 +84,16 @@ localStorage.getItem(
 const ENERGY_INTERVAL = 30 * 60; // seconds (default 30 minutes)
 
 let energyGain = energyLv;
-const MAX_MINE_HOURS = 10;
-const MAX_MINE_SECONDS = MAX_MINE_HOURS * 60 * 60;
-
-let pendingMineCoins = 0;
 const particles = [];
-// ================= SOUNDS =================
-
-const clickSound = new Audio("sounds/click.mp3");
-clickSound.volume = 0.35;
-
-const upgradeSound = new Audio("sounds/upgrade.mp3");
-upgradeSound.volume = 0.45;
-
-function playSound(sound){
-    try{
-        sound.currentTime = 0;
-        sound.play();
-    }catch(e){}
-}
 
 // save control
 let _saveInProgress = false;
 let _savePending = false;
 
 // Debug panel disabled
-function ensureDebugPanel(){
+function ensureDebugPanel(){}
 
-    let panel = document.getElementById("debugPanel");
-
-    if(panel) return panel;
-
-    panel = document.createElement("div");
-
-    panel.id = "debugPanel";
-
-    panel.style.position = "fixed";
-    panel.style.left = "10px";
-    panel.style.right = "10px";
-    panel.style.bottom = "140px";
-    panel.style.maxHeight = "180px";
-    panel.style.overflow = "auto";
-
-    panel.style.background = "rgba(0,0,0,.85)";
-    panel.style.color = "#00ff66";
-    panel.style.fontSize = "11px";
-    panel.style.padding = "8px";
-    panel.style.borderRadius = "10px";
-    panel.style.zIndex = "99999";
-    panel.style.whiteSpace = "pre-wrap";
-
-    document.body.appendChild(panel);
-
-    return panel;
-}
-
-function updateDebugPanel(msg){
-
-    const panel = ensureDebugPanel();
-
-    panel.textContent =
-        msg + "\n\n------------------\n\n" +
-        panel.textContent;
-}
+function updateDebugPanel(msg){}
 
 // ================= SAVE =================
 async function saveOnline(){
@@ -193,7 +139,6 @@ Number(mineTimerEnd)||0
 
 		if(error){
 			console.warn('supabase upsert error', status, error);
-			alert(JSON.stringify(error));
 			updateDebugPanel('supabase upsert error: ' + status + ' ' + JSON.stringify(error));
 			// try an update fallback (if upsert fails for some reason)
 			try{
@@ -376,7 +321,6 @@ function tryUpgrade(kind){
 	if(coins < price) return false;
 
 	coins -= price;
-	playSound(upgradeSound);
 
 	if(kind==='power') powerLv++;
 	else if(kind==='energy') energyLv++;
@@ -539,57 +483,68 @@ setInterval(updateEnergyTimer, 1000);
 updateEnergyTimer();
 function updateMineTimer(){
 
-    const now = Date.now();
+	const now = Date.now();
 
-    if(mineLv <= 0){
-        mineTimerEnd = 0;
-        pendingMineCoins = 0;
+	if(mineLv <= 0){
+		mineTimerEnd = 0;
 
-        localStorage.setItem("mineTimerEnd","0");
-        return;
-    }
+		localStorage.setItem(
+			"mineTimerEnd",
+			"0"
+		);
 
-    if(!mineTimerEnd){
+		return;
+	}
 
-        mineTimerEnd = now;
-        localStorage.setItem(
-            "mineTimerEnd",
-            String(mineTimerEnd)
-        );
+	if(!mineTimerEnd){
 
-        return;
-    }
+		mineTimerEnd =
+			now +
+			ENERGY_INTERVAL * 1000;
 
-    const passedSeconds =
-        Math.floor(
-            (now - mineTimerEnd) / 1000
-        );
+		localStorage.setItem(
+			"mineTimerEnd",
+			String(mineTimerEnd)
+		);
+	}
 
-    if(passedSeconds < ENERGY_INTERVAL)
-        return;
+	if(now >= mineTimerEnd){
 
-    const limitedSeconds =
-        Math.min(
-            passedSeconds,
-            MAX_MINE_SECONDS
-        );
+		const interval =
+			ENERGY_INTERVAL * 1000;
 
-    const cycles =
-        Math.floor(
-            limitedSeconds /
-            ENERGY_INTERVAL
-        );
+		const passed =
+			1 +
+			Math.floor(
+				(now - mineTimerEnd) /
+				interval
+			);
 
-    if(cycles <= 0)
-        return;
+		const reward =
+			passed * mineLv;
 
-    pendingMineCoins =
-        cycles * mineLv;
+		coins += reward;
 
-    showMinePopup(
-        pendingMineCoins,
-        cycles * energyLv
-    );
+		mineTimerEnd +=
+			passed *
+			interval;
+
+		localStorage.setItem(
+			"coins",
+			String(coins)
+		);
+
+		localStorage.setItem(
+			"mineTimerEnd",
+			String(mineTimerEnd)
+		);
+
+		render();
+
+		updateUpgradeUI();
+
+		saveOnline();
+	}
 }
 setInterval(
 updateMineTimer,
@@ -616,14 +571,9 @@ renderer.setSize(260,260);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.6;
-console.log("COIN CONTAINER:", document.getElementById("coin3d"));
-const coinContainer = document.getElementById("coin3d");
 
-if(coinContainer){
-    coinContainer.appendChild(renderer.domElement);
-}else{
-    console.error("coin3d not found");
-}
+document.getElementById("coin3d").appendChild(renderer.domElement);
+
 // ================= LIGHTS =================
 scene.add(new THREE.AmbientLight(0xffffff, 5));
 
@@ -680,7 +630,6 @@ return new THREE.CanvasTexture(c);
 }
 
 // ================= COIN (FIXED THICKNESS) =================
-console.log("CREATING 3D COIN...");
 const coin = new THREE.Mesh(
 new THREE.CylinderGeometry(2.7,2.7,0.45,180), // 🔥 نازک‌تر شد
 new THREE.MeshStandardMaterial({
@@ -697,7 +646,7 @@ scene.add(coin);
 
 // ================= PARTICLES =================
 function spawnParticles(){
-for(let i=0;i<6;i++){
+for(let i=0;i<22;i++){
 particles.push({
 x:0,
 y:0,
@@ -756,7 +705,6 @@ function attachHandlers(){
 
 				coins += power;
 				energy--;
-				playSound(clickSound);
 
 				if(energy < maxEnergy && !energyTimerEnd){
 					energyTimerEnd = Date.now() + ENERGY_INTERVAL * 1000;
@@ -797,7 +745,6 @@ setInterval(render,1000);
 render();
 async function loadOnline(){
   try{
-	updateDebugPanel("LOAD ONLINE START");
 		console.log('loadOnline() - USER:', USER);
 
 		const { data, error } = await db
@@ -805,7 +752,6 @@ async function loadOnline(){
 	.select("*")
 .eq("telegram_id", USER)
 	.maybeSingle();
-	updateDebugPanel("SUPABASE RESULT: " + JSON.stringify(data));
 
 if (error) {
   console.log("load error:", error);
@@ -896,7 +842,7 @@ render();
 try{ attachHandlers(); }catch(e){}
 
 // try to save once after load to ensure DB row exists
-// try{ await saveOnline(); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
+try{ await saveOnline(); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
 
 updateEnergyTimer();
 
