@@ -616,7 +616,7 @@ renderer.setSize(260,260);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.6;
-
+console.log("COIN CONTAINER:", document.getElementById("coin3d"));
 document.getElementById("coin3d").appendChild(renderer.domElement);
 
 // ================= LIGHTS =================
