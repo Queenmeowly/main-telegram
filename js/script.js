@@ -154,6 +154,7 @@ Number(mineTimerEnd)||0
 
 		if(error){
 			console.warn('supabase upsert error', status, error);
+			alert(JSON.stringify(error));
 			updateDebugPanel('supabase upsert error: ' + status + ' ' + JSON.stringify(error));
 			// try an update fallback (if upsert fails for some reason)
 			try{
