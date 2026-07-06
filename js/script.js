@@ -77,6 +77,8 @@ let maxEnergy = Number(localStorage.getItem('maxEnergy')) || 100;
 let energyTimerEnd = Number(localStorage.getItem('energyTimerEnd')) || 0;
 let mineUnclaimed =
 Number(localStorage.getItem("mineUnclaimed")) || 0;
+let mineLastUpdate =
+Number(localStorage.getItem("mineLastUpdate")) || Date.now();
 let mineTimerEnd =
 Number(
 localStorage.getItem(
@@ -137,6 +139,8 @@ Number(mineTimerEnd)||0,
 
 mine_unclaimed:
 Number(mineUnclaimed)||0,
+mine_last_update:
+Number(mineLastUpdate)||Date.now(),
 
 last_online:
 Date.now()
@@ -491,68 +495,64 @@ setInterval(updateEnergyTimer, 1000);
 updateEnergyTimer();
 function updateMineTimer(){
 
-	const now = Date.now();
+    if(mineLv <= 0)
+        return;
 
-	if(mineLv <= 0){
-		mineTimerEnd = 0;
 
-		localStorage.setItem(
-			"mineTimerEnd",
-			"0"
-		);
+    const now = Date.now();
 
-		return;
-	}
 
-	if(!mineTimerEnd){
+    if(!mineLastUpdate){
+        mineLastUpdate = now;
+    }
 
-		mineTimerEnd =
-			now +
-			ENERGY_INTERVAL * 1000;
 
-		localStorage.setItem(
-			"mineTimerEnd",
-			String(mineTimerEnd)
-		);
-	}
+    const passedSeconds =
+    Math.floor(
+        (now - mineLastUpdate) / 1000
+    );
 
-	if(now >= mineTimerEnd){
 
-		const interval =
-			ENERGY_INTERVAL * 1000;
+    const interval = 10;
 
-		const passed =
-			1 +
-			Math.floor(
-				(now - mineTimerEnd) /
-				interval
-			);
 
-const reward =
-passed * mineLv;
+    if(passedSeconds >= interval){
 
-mineUnclaimed += reward;
 
-		mineTimerEnd +=
-			passed *
-			interval;
+        const cycles =
+        Math.floor(
+            passedSeconds / interval
+        );
 
-localStorage.setItem(
-"mineUnclaimed",
-String(mineUnclaimed)
-);
 
-		localStorage.setItem(
-			"mineTimerEnd",
-			String(mineTimerEnd)
-		);
+        const reward =
+        cycles * mineLv;
 
-		render();
 
-		updateUpgradeUI();
+        mineUnclaimed += reward;
 
-		saveOnline();
-	}
+
+        mineLastUpdate +=
+        cycles * interval * 1000;
+
+
+
+        localStorage.setItem(
+            "mineUnclaimed",
+            String(mineUnclaimed)
+        );
+
+
+        localStorage.setItem(
+            "mineLastUpdate",
+            String(mineLastUpdate)
+        );
+
+
+        saveOnline();
+
+    }
+
 }
 setInterval(
 updateMineTimer,
@@ -784,6 +784,16 @@ data.mine_timer_end
 )||0;
 mineUnclaimed =
 Number(data.mine_unclaimed)||0;
+mineLastUpdate =
+Number(data.mine_last_update)
+||
+Date.now();
+
+
+localStorage.setItem(
+"mineLastUpdate",
+String(mineLastUpdate)
+);
 
 localStorage.setItem(
 "mineUnclaimed",
