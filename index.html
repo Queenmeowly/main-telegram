@@ -103,34 +103,35 @@ Upgrade
 </div>
 
 </div>
-<!-- Offline Rewards -->
-<div id="offlinePopup" class="offline-popup">
 
-  <div class="offline-box">
-
-    <h2>Welcome Back!</h2>
-
-    <p>You earned while you were away</p>
-
-    <div class="offline-reward">
-      💎 <span id="offlineCoins">0</span> FC
-    </div>
-
-    <div class="offline-reward">
-      ⚡ <span id="offlineEnergy">0</span> Energy
-    </div>
-
-    <button id="claimOffline">
-      Claim
-    </button>
-
-  </div>
-
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="js/script.js?v=3"></script>
+
+
+<div id="offlinePopup">
+
+<div class="offline-box">
+        <h2>⛏️ گزارش معدن</h2>
+
+        <p>
+        زمانی که نبودید معدن شما:
+        </p>
+
+        <h1 id="offlineCoins">0</h1>
+
+        <p>
+        سکه استخراج کرده است
+        </p>
+
+        <button id="claimOffline">
+            دریافت سکه
+        </button>
+
+    </div>
+
+</div>
 
 </body>
 </html>
