@@ -106,9 +106,44 @@ let _saveInProgress = false;
 let _savePending = false;
 
 // Debug panel disabled
-function ensureDebugPanel(){}
+function ensureDebugPanel(){
 
-function updateDebugPanel(msg){}
+    let panel = document.getElementById("debugPanel");
+
+    if(panel) return panel;
+
+    panel = document.createElement("div");
+
+    panel.id = "debugPanel";
+
+    panel.style.position = "fixed";
+    panel.style.left = "10px";
+    panel.style.right = "10px";
+    panel.style.bottom = "140px";
+    panel.style.maxHeight = "180px";
+    panel.style.overflow = "auto";
+
+    panel.style.background = "rgba(0,0,0,.85)";
+    panel.style.color = "#00ff66";
+    panel.style.fontSize = "11px";
+    panel.style.padding = "8px";
+    panel.style.borderRadius = "10px";
+    panel.style.zIndex = "99999";
+    panel.style.whiteSpace = "pre-wrap";
+
+    document.body.appendChild(panel);
+
+    return panel;
+}
+
+function updateDebugPanel(msg){
+
+    const panel = ensureDebugPanel();
+
+    panel.textContent =
+        msg + "\n\n------------------\n\n" +
+        panel.textContent;
+}
 
 // ================= SAVE =================
 async function saveOnline(){
