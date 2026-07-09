@@ -75,6 +75,7 @@ let chargeLv = Number(localStorage.getItem('chargeLv')) || 1;
 let maxEnergy = Number(localStorage.getItem('maxEnergy')) || 100;
 
 let energyTimerEnd = Number(localStorage.getItem('energyTimerEnd')) || 0;
+let popupReward = 0;
 let mineUnclaimed =
 Number(localStorage.getItem("mineUnclaimed")) || 0;
 let mineLastUpdate =
@@ -552,12 +553,6 @@ await saveOnline();
     }
 
 }
-setInterval(
-updateMineTimer,
-1000
-);
-
-updateMineTimer();
 
 // NOTE: remove immediate startup fallback here — timer should be derived from stored value or server
 // (we set/restore `energyTimerEnd` inside `loadOnline()` to preserve continuity across refreshes).
@@ -869,7 +864,8 @@ try{ attachHandlers(); }catch(e){}
 try{ await saveOnline(); }catch(e){ updateDebugPanel('initial save failed: '+String(e)); }
 
 updateEnergyTimer();
-
+setInterval(updateMineTimer, 1000);
+updateMineTimer();
 })();
 
 // global error handlers (show in debug panel for Telegram WebView)
@@ -886,8 +882,9 @@ const amount = document.getElementById("offlineCoins");
 
 if(mineUnclaimed > 0){
 
-amount.innerText = mineUnclaimed;
+popupReward = mineUnclaimed;
 
+amount.innerText = popupReward;
 popup.classList.add("show");
 
 }
@@ -903,9 +900,14 @@ if(btn){
 
 btn.onclick = async()=>{
 
-    coins += mineUnclaimed;
+coins += popupReward;
 
+mineUnclaimed -= popupReward;
+
+if(mineUnclaimed < 0)
     mineUnclaimed = 0;
+
+popupReward = 0;
 
     mineLastUpdate = Date.now();
 
@@ -914,10 +916,10 @@ btn.onclick = async()=>{
         String(coins)
     );
 
-    localStorage.setItem(
-        "mineUnclaimed",
-        "0"
-    );
+localStorage.setItem(
+    "mineUnclaimed",
+    String(mineUnclaimed)
+);
 
     localStorage.setItem(
         "mineLastUpdate",
