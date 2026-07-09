@@ -493,8 +493,7 @@ if(energy < maxEnergy && (!energyTimerEnd || energyTimerEnd <= 0)){
 // start periodic update every second
 setInterval(updateEnergyTimer, 1000);
 updateEnergyTimer();
-function updateMineTimer(){
-
+async function updateMineTimer(){
     if(mineLv <= 0)
         return;
 
@@ -549,8 +548,7 @@ function updateMineTimer(){
         );
 
 
-        saveOnline();
-
+await saveOnline();
     }
 
 }
@@ -829,26 +827,27 @@ String(mineTimerEnd)
 
 }
 
-	// persist loaded values locally so reloads show same state immediately
-	localStorage.setItem('coins', String(coins));
-	localStorage.setItem('energy', String(energy));
 	localStorage.setItem('powerLv', String(powerLv));
-	localStorage.setItem('energyLv', String(energyLv));
-	localStorage.setItem('mineLv', String(mineLv));
-	localStorage.setItem('chargeLv', String(chargeLv));
-	localStorage.setItem('maxEnergy', String(maxEnergy));
+localStorage.setItem('energyLv', String(energyLv));
+localStorage.setItem('mineLv', String(mineLv));
+localStorage.setItem('chargeLv', String(chargeLv));
+localStorage.setItem('maxEnergy', String(maxEnergy));
 
 recalcDerived();
 
+// اول مقدار ماین را حساب کن
+await updateMineTimer();
 render();
 
 updateUpgradeUI();
 
 updateEnergyTimer();
-		updateDebugPanel('loadOnline() - USER: ' + String(USER));
-console.log("DATA LOADED:", data);
-showOfflineReward();
 
+updateDebugPanel('loadOnline() - USER: ' + String(USER));
+console.log("DATA LOADED:", data);
+
+// حالا پنجره را باز کن
+showOfflineReward();
   }catch(e){
     console.log("load crash", e);
   }
@@ -905,28 +904,34 @@ if(btn){
 
 btn.onclick = async()=>{
 
-coins += mineUnclaimed;
+    coins += mineUnclaimed;
 
-mineUnclaimed = 0;
+    mineUnclaimed = 0;
 
-localStorage.setItem(
-"coins",
-String(coins)
-);
+    mineLastUpdate = Date.now();
 
-localStorage.setItem(
-"mineUnclaimed",
-"0"
-);
+    localStorage.setItem(
+        "coins",
+        String(coins)
+    );
 
-render();
+    localStorage.setItem(
+        "mineUnclaimed",
+        "0"
+    );
 
-await saveOnline();
+    localStorage.setItem(
+        "mineLastUpdate",
+        String(mineLastUpdate)
+    );
 
-document
-.getElementById("offlinePopup")
-.classList.remove("show");
+    render();
 
+    await saveOnline();
+
+    document
+        .getElementById("offlinePopup")
+        .classList.remove("show");
 };
 
 }
