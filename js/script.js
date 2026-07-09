@@ -836,7 +836,6 @@ localStorage.setItem('maxEnergy', String(maxEnergy));
 recalcDerived();
 
 // اول مقدار ماین را حساب کن
-await updateMineTimer();
 render();
 
 updateUpgradeUI();
